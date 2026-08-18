@@ -6,16 +6,12 @@ ImageTriageEngine.triage(TriageInput) -> TriageResult.
 
 import json
 import os
-import sys
 from pathlib import Path
 
 import pytest
 
-# Permite importar `ai` a partir de backend/app no runner do GitHub Actions.
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "app"))
-
-from ai.image_triage.engine import ImageTriageEngine
-from ai.image_triage.schemas import FaceAngle, TriageInput, TriageResult
+from app.ai.image_triage.engine import ImageTriageEngine
+from app.ai.image_triage.schemas import FaceAngle, TriageInput, TriageResult
 
 
 @pytest.fixture
