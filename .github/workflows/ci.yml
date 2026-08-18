@@ -107,12 +107,7 @@ jobs:
       - name: Install dependencies
         run: cd frontend && npm install
       - name: Run tests
-        run: cd frontend && npm test -- --coverage --watchAll=false
-      - name: Upload coverage
-        uses: codecov/codecov-action@v4
-        with:
-          files: ./frontend/coverage/lcov.info
-          fail_ci_if_error: false
+        run: cd frontend && npm test -- --watchAll=false
 
   frontend-build:
     name: Frontend Build
