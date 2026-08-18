@@ -18,6 +18,7 @@ from typing import Dict, List, Optional, Any, Tuple
 from uuid import UUID
 
 from PIL import Image
+import io
 import httpx
 
 from app.ai.visagism.schemas import (
@@ -211,7 +212,7 @@ class VisagismPipeline:
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(photo.url, timeout=10.0)
-                image = Image.open(httpx.BytesIO(response.content))
+                image = Image.open(io.BytesIO(response.content))
         except Exception:
             return PhotoQualityAssessment(
                 photo_id=photo.photo_id,
@@ -294,7 +295,7 @@ class VisagismPipeline:
                 # Carregar imagem
                 async with httpx.AsyncClient() as client:
                     response = await client.get(photo.url, timeout=10.0)
-                    image = Image.open(httpx.BytesIO(response.content))
+                    image = Image.open(io.BytesIO(response.content))
                 
                 # Medir
                 result = await self.measurement_engine.measure_photo(
@@ -402,7 +403,7 @@ class VisagismPipeline:
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(photo.url, timeout=10.0)
-                image = Image.open(httpx.BytesIO(response.content))
+                image = Image.open(io.BytesIO(response.content))
             
             # Obter landmarks da foto
             landmarks = []
@@ -450,7 +451,7 @@ class VisagismPipeline:
             try:
                 async with httpx.AsyncClient() as client:
                     response = await client.get(photo.url, timeout=10.0)
-                    image = Image.open(httpx.BytesIO(response.content))
+                    image = Image.open(io.BytesIO(response.content))
                 
                 photos_for_llm.append({
                     'photo_id': photo.photo_id,
