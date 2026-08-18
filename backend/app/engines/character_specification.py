@@ -95,7 +95,7 @@ class CharacterSpecificationEngine:
         "jaleco branco": "uniform", "jaleco": "uniform", "uniforme": "uniform", "uniform": "uniform",
         "roupa casual": "casual", "casual": "casual", "roupa formal": "formal", "formal": "formal", "fantasia": "costume", "costume": "costume",
     }
-    WARDROBE_TONES = {"escuro": "dark", "dark": "dark", "escura": "dark", "claro": "light", "light": "light", "clara": "light", "vibrante": "vibrant", "vibrant": "vibrant", "neutro": "neutral", "neutral": "neutral"}
+    WARDROBE_TONES = {"escuro": "dark", "dark": "dark", "escura": "dark", "branco": "light", "branca": "light", "claro": "light", "light": "light", "clara": "light", "vibrante": "vibrant", "vibrant": "vibrant", "neutro": "neutral", "neutral": "neutral"}
 
     def __init__(self): self.specifications_generated = 0
 
