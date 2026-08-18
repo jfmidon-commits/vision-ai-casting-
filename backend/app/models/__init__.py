@@ -7,6 +7,9 @@ from .models import (
     ProfessionalExperience, Character, Campaign,
     Agency, AgencyContact, CareerFeedback,
     AppearanceRecord, StylePreference, ContentPerformance,
+    # Etapas 2, 3 e 5: Digital Twin / Identity Preservation
+    DigitalTwinVersion, IdentityTrait, AppearanceState, CharacterTransformation,
+    IdentityReference, AssetOriginLog,
 )
 
 __all__ = [
@@ -17,4 +20,7 @@ __all__ = [
     "ProfessionalExperience", "Character", "Campaign",
     "Agency", "AgencyContact", "CareerFeedback",
     "AppearanceRecord", "StylePreference", "ContentPerformance",
+    # Etapas 2, 3 e 5
+    "DigitalTwinVersion", "IdentityTrait", "AppearanceState", "CharacterTransformation",
+    "IdentityReference", "AssetOriginLog",
 ]
