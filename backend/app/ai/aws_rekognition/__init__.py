@@ -1,0 +1,1 @@
+from .rekognition import AWSRekognitionService
