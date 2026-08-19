@@ -1,4 +1,11 @@
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+try:
+    from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+except ImportError:
+    # Fallback para SQLAlchemy < 2.0
+    from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+    from sqlalchemy.orm import sessionmaker
+    async_sessionmaker = sessionmaker
+
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.pool import NullPool
 from app.config import settings
