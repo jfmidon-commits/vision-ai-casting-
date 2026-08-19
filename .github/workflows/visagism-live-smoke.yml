@@ -50,7 +50,7 @@ jobs:
           echo "OPENAI_API_KEY is present (value intentionally hidden)."
 
       - name: Install smoke dependencies
-        run: pip install "pydantic-settings==2.3.4" "httpx==0.27.0" "pillow==10.4.0"
+        run: pip install "pydantic-settings==2.3.4" "httpx==0.27.0" "pillow==10.4.0" "numpy==2.1.3"
 
       - name: Run one real visagism image edit
         working-directory: backend
