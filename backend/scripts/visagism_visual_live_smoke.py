@@ -1,7 +1,4 @@
-"""Live smoke test for Vision visagism image editing.
-
-This script intentionally performs one real OpenAI image edit. It must only run
-when OPENAI_API_KEY is injected by the runtime/CI secret store.
+"""Live smoke test for Vision visagism image editing via Cloudflare Workers AI.
 
 The image simulator module is loaded directly from its file so this focused
 smoke test does not import the full visagism package (MediaPipe/OpenCV, etc.).
@@ -54,9 +51,10 @@ RECOMMENDATION = {
 
 
 async def main() -> None:
-    if not os.environ.get("OPENAI_API_KEY"):
-        raise SystemExit("LIVE_SMOKE_BLOCKED: OPENAI_API_KEY nao configurada no runtime")
-
+    if not os.environ.get("CLOUDFLARE_API_TOKEN"):
+        raise SystemExit("LIVE_SMOKE_BLOCKED: CLOUDFLARE_API_TOKEN nao configurado")
+    if not os.environ.get("CLOUDFLARE_ACCOUNT_ID"):
+        raise SystemExit("LIVE_SMOKE_BLOCKED: CLOUDFLARE_ACCOUNT_ID nao configurado")
     if not FIXTURE.exists():
         raise SystemExit(f"LIVE_SMOKE_BLOCKED: fixture nao encontrada: {FIXTURE}")
 
@@ -73,6 +71,10 @@ async def main() -> None:
             "LIVE_SMOKE_FAILED: "
             f"status={result.status}; error={result.error or 'sem detalhe'}"
         )
+    if result.provider != "cloudflare":
+        raise SystemExit(
+            f"LIVE_SMOKE_FAILED: esperado provider=cloudflare; recebido={result.provider}"
+        )
 
     prefix = "data:image/png;base64,"
     if not result.image_data_url.startswith(prefix):
@@ -86,8 +88,8 @@ async def main() -> None:
     OUTPUT.write_bytes(image_bytes)
 
     print(
-        "LIVE_SMOKE_SUCCESS: visual simulation generated and decoded; "
-        f"model={result.model}; bytes={len(image_bytes)}"
+        "LIVE_SMOKE_SUCCESS: Cloudflare visual simulation generated and decoded; "
+        f"provider={result.provider}; model={result.model}; bytes={len(image_bytes)}"
     )
 
 
