@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     OPENAI_MODEL: str = "gpt-4o"
     OPENAI_MAX_TOKENS: int = 2500
     OPENAI_TEMPERATURE: float = 0.3
-    OPENAI_IMAGE_MODEL: str = "gpt-image-1.5"
+    OPENAI_IMAGE_MODEL: str = "gpt-image-2"
     OPENAI_IMAGE_SIZE: str = "1024x1024"
     OPENAI_IMAGE_QUALITY: str = "high"
 
