@@ -55,3 +55,12 @@ jobs:
       - name: Run one real visagism image edit
         working-directory: backend
         run: python scripts/visagism_visual_live_smoke.py
+
+      - name: Upload generated visual simulation
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visagism-visual-live-smoke
+          path: backend/benchmark_results/live/visagism_visual_smoke.png
+          if-no-files-found: error
+          retention-days: 7
