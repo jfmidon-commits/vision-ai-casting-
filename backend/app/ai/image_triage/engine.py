@@ -145,8 +145,6 @@ class ImageTriageEngine:
                 face_result, img_array, pose_result
             )
 
-            # Body framing is stronger evidence than hair/angle when hips are
-            # visible and knees are mostly outside the frame.
             if category in (
                 TriageCategory.FRONTAL,
                 TriageCategory.FRONTAL_CLOSE,
@@ -408,7 +406,22 @@ class ImageTriageEngine:
         yaw = self._estimate_yaw(landmarks)
         pitch = self._estimate_pitch(landmarks)
         smile_score = self._detect_smile(face_result)
-        scores = {"yaw": yaw, "pitch": pitch, "smile_score": smile_score}
+
+        right_eye_width = abs(landmarks[33]["x"] - landmarks[133]["x"])
+        left_eye_width = abs(landmarks[362]["x"] - landmarks[263]["x"])
+        max_eye_width = max(right_eye_width, left_eye_width)
+        eye_compression = (
+            min(right_eye_width, left_eye_width) / max_eye_width
+            if max_eye_width > 0.001
+            else 1.0
+        )
+
+        scores = {
+            "yaw": yaw,
+            "pitch": pitch,
+            "smile_score": smile_score,
+            "eye_compression": eye_compression,
+        }
 
         if smile_score >= 0.38:
             return TriageCategory.SMILING, min(1.0, 0.55 + smile_score * 0.45), scores
@@ -418,7 +431,13 @@ class ImageTriageEngine:
             if pitch < -10:
                 return TriageCategory.FRONTAL_CLOSE, 0.85, scores
             return TriageCategory.FRONTAL, 0.9, scores
-        if yaw >= 48:
+
+        # A true profile compresses the far eye much more than a 3/4 pose.
+        # Keep the conservative 48-degree threshold, but recover near-threshold
+        # right profiles when FaceMesh independently confirms strong eye
+        # foreshortening. This avoids turning the valid 3/4-right sample into a
+        # profile just by lowering the yaw cutoff again.
+        if yaw >= 48 or (yaw >= 42 and eye_compression <= 0.55):
             return TriageCategory.PROFILE_RIGHT, 0.78, scores
         if yaw <= -48:
             return TriageCategory.PROFILE_LEFT, 0.78, scores
