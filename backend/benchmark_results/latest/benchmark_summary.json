@@ -1,0 +1,18 @@
+{
+  "dataset_id": "Dataset_Referencia_001",
+  "protocol_coverage": 0.3333333333333333,
+  "angles_detected": {
+    "frontal": 0,
+    "three_quarter_left": 1,
+    "three_quarter_right": 1,
+    "profile_left": 0,
+    "profile_right": 0,
+    "smiling": 1,
+    "hairline": 0,
+    "posterior": 0,
+    "half_body": 0
+  },
+  "triage_selected_count": 5,
+  "triage_rejected_count": 3,
+  "processing_time_seconds": 0.27
+}

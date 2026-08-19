@@ -1,0 +1,9 @@
+{
+  "workflow": "Visagism Benchmark - Dataset 001",
+  "benchmark_version": "3-persisted-results",
+  "run_id": "32248454273",
+  "run_number": "26",
+  "event": "push",
+  "source_sha": "08853f915ed634336b5c6dc5a4b1b4e306e92554",
+  "dataset": "backend/tests/fixtures/visagism/dataset_001"
+}

@@ -1,0 +1,16 @@
+{
+  "dataset_image": "01_frontal_neutra_close.jpg",
+  "landmarks_count": 478,
+  "symmetry_score": 0.777,
+  "facial_proportions": {
+    "upper_third": 0.142,
+    "middle_third": 0.371,
+    "lower_third": 0.487,
+    "face_width": 0.3549695909023285,
+    "face_height": 0.32337459921836853
+  },
+  "face_shape": "round",
+  "eye_aspect_ratio": 0.19358488834609588,
+  "mouth_aspect_ratio": 0.0012628217341346148,
+  "mock_data": false
+}
