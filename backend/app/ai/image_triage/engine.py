@@ -147,9 +147,9 @@ class ImageTriageEngine:
 
             hairline_score = self._detect_hairline(img_array, pose_result, face_result)
             if (
-                hairline_score >= 0.58
+                hairline_score >= 0.46
                 and category != TriageCategory.SMILING
-                and abs(scores.get("yaw", 0.0)) < 18
+                and abs(scores.get("yaw", 0.0)) < 22
             ):
                 return TriageResult(
                     filename=filename,
@@ -199,7 +199,7 @@ class ImageTriageEngine:
             )
 
         hairline_score = self._detect_hairline(img_array, pose_result)
-        if hairline_score >= 0.58:
+        if hairline_score >= 0.50:
             return TriageResult(
                 filename=filename,
                 category=TriageCategory.HAIRLINE,
@@ -303,7 +303,9 @@ class ImageTriageEngine:
                 score += 0.18
 
         h, w = img_array.shape[:2]
-        central = img_array[int(h * 0.12) : int(h * 0.55), int(w * 0.25) : int(w * 0.75)]
+        central = img_array[
+            int(h * 0.12) : int(h * 0.55), int(w * 0.25) : int(w * 0.75)
+        ]
         if central.size:
             gray = cv2.cvtColor(central, cv2.COLOR_RGB2GRAY)
             if np.var(gray) > 350:
@@ -369,10 +371,10 @@ class ImageTriageEngine:
                 face_height = chin_y - forehead_top
                 if face_height > 0:
                     forehead_ratio = (brow_y - forehead_top) / face_height
-                    if forehead_ratio >= 0.30:
-                        score += 0.58
-                    elif forehead_ratio >= 0.27:
-                        score += 0.46
+                    if forehead_ratio >= 0.26:
+                        score += 0.52
+                    elif forehead_ratio >= 0.23:
+                        score += 0.44
 
                 # A visible, clean forehead tends to have lower local edge density.
                 h, w = img_array.shape[:2]
@@ -386,8 +388,8 @@ class ImageTriageEngine:
                     gray = cv2.cvtColor(region, cv2.COLOR_RGB2GRAY)
                     edges = cv2.Canny(gray, 50, 120)
                     edge_density = float(np.mean(edges > 0))
-                    if edge_density < 0.12:
-                        score += 0.14
+                    if edge_density < 0.16:
+                        score += 0.12
 
         return min(score, 1.0)
 
@@ -407,13 +409,13 @@ class ImageTriageEngine:
             return TriageCategory.SMILING, min(1.0, 0.55 + smile_score * 0.45), scores
 
         abs_yaw = abs(yaw)
-        if abs_yaw < 10:
+        if abs_yaw < 6:
             if pitch < -10:
                 return TriageCategory.FRONTAL_CLOSE, 0.85, scores
             return TriageCategory.FRONTAL, 0.9, scores
-        if yaw >= 38:
+        if yaw >= 42:
             return TriageCategory.PROFILE_RIGHT, 0.78, scores
-        if yaw <= -38:
+        if yaw <= -42:
             return TriageCategory.PROFILE_LEFT, 0.78, scores
         if yaw > 0:
             return TriageCategory.THREE_QUARTER_RIGHT, 0.82, scores
@@ -453,6 +455,12 @@ class ImageTriageEngine:
         return ((eye_level - nose["y"]) / face_height) * 45
 
     def _detect_smile(self, face_result: Dict) -> float:
+        # Backwards compatibility: older callers/tests pass a raw landmarks list.
+        if isinstance(face_result, list):
+            face_result = {"landmarks": face_result, "blendshapes": {}}
+        elif not isinstance(face_result, dict):
+            return 0.0
+
         blendshapes = face_result.get("blendshapes", {})
         smile_blend = (
             blendshapes.get("mouthSmileLeft", 0.0)
