@@ -31,9 +31,12 @@ on:
       - 'backend/tests/test_visagism_benchmark.py'
       - '.github/workflows/visagism-benchmark.yml'
 
+permissions:
+  contents: write
+
 env:
   PYTHON_VERSION: "3.11"
-  BENCHMARK_VERSION: "2-real-facemesh"
+  BENCHMARK_VERSION: "3-persisted-results"
 
 jobs:
   benchmark:
@@ -92,6 +95,34 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
+      - name: Persist benchmark results to repository
+        if: success() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: |
+          mkdir -p backend/benchmark_results/latest
+          cp backend/benchmark_output/benchmark_summary.json backend/benchmark_results/latest/benchmark_summary.json
+          cp backend/benchmark_output/facemesh_result.json backend/benchmark_results/latest/facemesh_result.json
+          cp backend/benchmark_output/visagism_result.json backend/benchmark_results/latest/visagism_result.json
+          cat > backend/benchmark_results/latest/run_metadata.json <<EOF
+          {
+            "workflow": "Visagism Benchmark - Dataset 001",
+            "benchmark_version": "$BENCHMARK_VERSION",
+            "run_id": "${{ github.run_id }}",
+            "run_number": "${{ github.run_number }}",
+            "event": "${{ github.event_name }}",
+            "source_sha": "${{ github.sha }}",
+            "dataset": "${{ steps.check_dataset.outputs.dataset_path }}"
+          }
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/benchmark_results/latest
+          if git diff --cached --quiet; then
+            echo "Benchmark results unchanged; nothing to commit."
+          else
+            git commit -m "chore(visagism): persist latest benchmark results [skip ci]"
+            git push origin HEAD:main
+          fi
+
       - name: Report results
         if: always()
         run: |
@@ -102,4 +133,5 @@ jobs:
           echo "Dataset: ${{ steps.check_dataset.outputs.dataset_path }}"
           echo "Images: ${{ steps.check_dataset.outputs.has_images }}"
           echo "Artifact: visagism-benchmark-dataset-001"
+          echo "Persisted path: backend/benchmark_results/latest/"
           echo "=========================================="
