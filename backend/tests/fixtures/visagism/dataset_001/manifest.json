@@ -1,0 +1,60 @@
+{
+  "dataset": "Dataset de Referencia 001",
+  "purpose": "benchmark inicial do ImageTriageEngine e VisagismAgent",
+  "files": [
+    {
+      "role": "01_frontal_neutra_close.jpg",
+      "source": "image-1786317991421.jpg"
+    },
+    {
+      "role": "02_frontal_neutra.jpg",
+      "source": "image-1786318070653.jpg"
+    },
+    {
+      "role": "03_tres_quartos_A.jpg",
+      "source": "image-1786318140070.jpg"
+    },
+    {
+      "role": "04_tres_quartos_B.jpg",
+      "source": "image-1786318155093.jpg"
+    },
+    {
+      "role": "05_perfil_A.jpg",
+      "source": "image-1786318182252.jpg"
+    },
+    {
+      "role": "06_perfil_B.jpg",
+      "source": "image-1786318193143.jpg"
+    },
+    {
+      "role": "07_sorriso.jpg",
+      "source": "image-1786318211936.jpg"
+    },
+    {
+      "role": "08_implantacao_referencia.jpg",
+      "source": "image-1786318324325.jpg"
+    },
+    {
+      "role": "09_posterior.jpg",
+      "source": "image-1786318351774.jpg"
+    },
+    {
+      "role": "10_meio_corpo.jpg",
+      "source": "image-1786318371119.jpg"
+    }
+  ],
+  "coverage": {
+    "frontal": true,
+    "three_quarter_both": true,
+    "profiles_both": true,
+    "smiling": true,
+    "hairline": true,
+    "posterior": true,
+    "half_body": true
+  },
+  "notes": [
+    "Implantacao capilar utilizavel, mas nao e captura tecnica perfeita: cabeca levemente elevada/cabelo apenas parcialmente afastado.",
+    "Para benchmark inicial, o conjunto e suficiente.",
+    "Uma captura futura de implantacao frontal com cabeca reta, bracos baixos e cabelo totalmente afastado melhoraria calibracao."
+  ]
+}

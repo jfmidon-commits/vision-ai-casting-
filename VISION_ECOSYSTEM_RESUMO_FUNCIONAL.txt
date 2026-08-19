@@ -1,0 +1,481 @@
+================================================================================
+  VISION ECOSYSTEM - RESUMO FUNCIONAL
+  O que esse software e capaz de fazer
+================================================================================
+
+1. O QUE E O VISION ECOSYSTEM
+--------------------------------------------------------------------------------
+
+O Vision e uma plataforma de inteligencia artificial voltada para profissionais
+de imagem: atores, modelos, casting, figuracao, agencias e produtores.
+
+A arquitetura segue o conceito de um "cerebro grande" (Vision Core) conectado a
+varios "mini cerebros" especializados. Cada mini cerebro domina uma area e aciona
+"motores" que executam tarefas pontuais.
+
+O sistema nao depende de uma unica IA. Ele funciona como um ORQUESTRADOR capaz
+de usar diferentes modelos, servicos e motores ao longo do tempo.
+
+================================================================================
+
+2. VISION CORE - CEREBRO CENTRAL
+--------------------------------------------------------------------------------
+
+O Vision Core e o orquestrador central. Ele:
+
+- Recebe comandos do usuario (texto ou voz)
+- Identifica a intencao do comando
+- Cria contexto completo do usuario (perfil, memoria, historico)
+- Escolhe o agente especializado correto para executar
+- Emite eventos para todos os modulos interessados
+- Solicita aprovacao humana quando necessario
+- Registra tudo em logs de auditoria
+- Retorna o resultado estruturado
+
+Exemplo de comando:
+  "Vision, cria uma postagem minha com perfil de executivo"
+
+Fluxo:
+  1. Vision Core recebe o texto
+  2. Reconhece a intencao: CREATE_CONTENT
+  3. Busca memoria do usuario (estilo, preferencias)
+  4. Encaminha ao SocialAgent
+  5. SocialAgent cria conteudo
+  6. Retorna para aprovacao (nao publica sem autorizacao)
+  7. Envia preview via WhatsApp com botoes APROVAR/ALTERAR/REJEITAR
+
+================================================================================
+
+3. MINI CEREBROS ESPECIALIZADOS (10 Agentes)
+--------------------------------------------------------------------------------
+
+Cada agente e um modulo independente que pode ser melhorado ou substituido sem
+afetar os outros.
+
+3.1 IDENTITY AGENT
+    - Gerencia perfil e identidade do usuario
+    - Atualiza dados pessoais e profissionais
+    - Verifica identidade
+    - Comandos: "atualiza meu perfil", "mostra meus dados"
+
+3.2 VISAGISM AGENT
+    - Analise completa de visagismo
+    - Recomendacoes de estilo personalizadas
+    - Colorimetria (tons que valorizam)
+    - Cortes de cabelo ideais
+    - Maquiagem recomendada
+    - Ja funciona com IA real (OpenAI + AWS Rekognition)
+
+3.3 DIGITAL TWIN AGENT
+    - Construcao do "gemeo digital" profissional
+    - Armazena fotos em multiplos angulos (frontal, perfil, 360)
+    - Videos de referencia
+    - Caracteristicas fisicas catalogadas
+    - Estilo e visagismo registrados
+    - Personagens ja realizados
+    - FUTURO: simulacao realista para casting
+      ("Como eu ficaria com barba de 3 dias nesse personagem?")
+
+3.4 CASTING AGENT
+    - Analise de oportunidades de casting
+    - Comparacao de requisitos com perfil do usuario
+    - Score de compatibilidade
+    - Recomendacao de candidatura
+    - Preparacao automatica de material
+    - FUTURO: candidatura automatizada com aprovacao
+
+3.5 PORTFOLIO AGENT
+    - Gestao e otimizacao de portfolio
+    - Selecao das melhores fotos
+    - Organizacao por categoria
+    - Sugestoes de atualizacao
+    - Comandos: "atualiza meu portfolio", "qual foto usar para comercial?"
+
+3.6 SOCIAL AGENT
+    - Criacao de conteudo para redes sociais
+    - Gera imagens (futuro: IA generativa)
+    - Gera legendas personalizadas
+    - Cria carrosseis
+    - Planeja Reels
+    - Adapta conteudo ao posicionamento profissional
+    - SEMPRE solicita aprovacao antes de publicar
+    - Comandos: "cria postagem", "faz um carrossel", "gera legenda"
+
+3.7 OPPORTUNITY AGENT
+    - Busca oportunidades no mercado
+    - Matching com perfil do usuario
+    - Alertas de vagas relevantes
+    - Ranking de oportunidades por compatibilidade
+    - Comandos: "procura oportunidades", "mostra as melhores vagas hoje"
+
+3.8 APPROVAL AGENT
+    - Gerencia workflows de aprovacao humana
+    - Envia previews para WhatsApp
+    - Processa respostas (APROVAR/ALTERAR/REJEITAR)
+    - Se ALTERAR: recebe feedback, gera nova versao, reenvia
+    - Garante que decisoes importantes sejam humanas
+
+3.9 ANALYTICS AGENT
+    - Analise de performance de conteudo
+    - Coleta metricas de redes sociais
+    - Identifica melhores horarios de postagem
+    - Sugere melhorias baseadas em dados
+    - Relatorios de carreira
+
+3.10 AUTOMATION AGENT
+    - Automacao de workflows repetitivos
+    - Envio de notificacoes
+    - Integracao entre agentes
+    - Execucao de tarefas agendadas
+
+================================================================================
+
+4. FLUXO DE APROVACAO HUMANA (WhatsApp)
+--------------------------------------------------------------------------------
+
+Toda acao importante passa por aprovacao humana:
+
+Vision gera publicacao
+        |
+        v
+Envia preview para WhatsApp do usuario
+        |
+        v
+Usuario recebe:
+  [APROVAR] [ALTERAR] [REJEITAR]
+        |
+        +---> APROVAR: publica no canal configurado
+        |
+        +---> ALTERAR: usuario descreve mudancas
+        |       |
+        |       v
+        |   Vision interpreta feedback
+        |       |
+        |       v
+        |   Gera nova versao
+        |       |
+        |       v
+        |   Volta para aprovacao
+        |
+        +---> REJEITAR: descarta e registra motivo
+
+Objetivo: automacao extrema com decisao final humana.
+
+================================================================================
+
+5. COMANDOS DE VOZ
+--------------------------------------------------------------------------------
+
+O usuario interage de forma natural:
+
+"Vision, cria uma postagem minha com perfil de executivo."
+"Procura uma foto boa para postar hoje."
+"Gera uma versao minha com barba de tres dias."
+"Prepara material para esse casting."
+"Faz outra versao dessa publicacao."
+"Publica essa."
+"Nao gostei. Faz uma versao mais seria."
+"Mostra as melhores oportunidades para mim hoje."
+
+O sistema converte voz em intencao estruturada e encaminha ao agente correto.
+
+================================================================================
+
+6. BANCO DE MEMORIA
+--------------------------------------------------------------------------------
+
+O sistema mantem memoria estruturada do usuario:
+
+- Historico de trabalhos realizados
+- Tipos de personagem que ja fez
+- Aparicoes aprovadas vs rejeitadas
+- Preferencias esteticas
+- Estilos de legenda que funcionam
+- Agencias e contatos
+- Resultados de castings anteriores
+- Conteudos com melhor performance
+- Feedbacks dados
+- Decisoes anteriores
+
+Essa memoria e consultavel por todos os mini cerebros para personalizar
+respostas e recomendacoes.
+
+================================================================================
+
+7. ANALISES DE IA JA FUNCIONAIS
+--------------------------------------------------------------------------------
+
+O sistema ja possui analises de IA reais e funcionais:
+
+7.1 ANALISE FACIAL COMPLETA
+    - Estrutura facial (formato do rosto)
+    - Proporcoes e simetria
+    - Fotogenia
+    - Angulos mais favoraveis
+
+7.2 VISAGISMO
+    - Colorimetria pessoal (tons que valorizam)
+    - Harmonia facial
+    - Estilo recomendado
+    - Cortes de cabelo ideais
+    - Maquiagem recomendada
+
+7.3 EXPRESSOES
+    - Catalogo de expressoes faciais
+    - Intensidade de cada expressao
+    - Recomendacoes de melhoria
+
+7.4 COLORIMETRIA
+    - Analise de tons de pele
+    - Paleta de cores pessoal
+    - Cores para evitar
+
+7.5 PERSONAL BRANDING
+    - Posicionamento profissional
+    - Estilo visual recomendado
+    - Mensagem de marca
+
+7.6 GROOMING
+    - Recomendacoes de cuidados
+    - Estetica masculina/feminina
+
+7.7 CASTING ANALYSIS
+    - Compatibilidade com personagens
+    - Pontuacao por criterios
+    - Recomendacao final
+
+Todas as analises geram relatorios PDF profissionais.
+
+================================================================================
+
+8. ARQUITETURA DESACOPLADA
+--------------------------------------------------------------------------------
+
+O sistema nao depende de nenhum fornecedor unico:
+
+Provedores de LLM (troca facil):
+  - OpenAI (GPT-4o) - atual
+  - Anthropic (Claude) - preparado
+  - Google (Gemini) - preparado
+  - Modelos locais (Ollama) - preparado
+
+Geracao de imagem (futuro):
+  - DALL-E
+  - Midjourney
+  - Stable Diffusion
+  - Provider A/B/C
+
+Redes sociais (futuro):
+  - Instagram (mock atual)
+  - TikTok
+  - YouTube
+  - LinkedIn
+
+Mensagens (futuro):
+  - WhatsApp (mock atual)
+  - Email
+  - Push notification
+
+Isso significa que se um servico falha ou fica caro, basta trocar o
+"provider" sem reescrever o sistema.
+
+================================================================================
+
+9. EVENTOS E AUDITORIA
+--------------------------------------------------------------------------------
+
+Todo evento importante e registrado:
+
+- Usuario criado, perfil atualizado
+- Casting criado, analisado
+- Conteudo criado, aprovado, publicado
+- Tarefa de IA criada, completada, falhou
+- Aprovacao solicitada, aprovada, rejeitada
+- Workflow iniciado, completado
+
+Cada acao gera um AuditLog com:
+- Quem fez (usuario, agente)
+- O que foi feito (acao)
+- Em quem (entidade, ID)
+- Estado anterior (before)
+- Estado novo (after)
+- IP e navegador
+- Data e hora
+
+Isso permite investigacao completa de qualquer incidente.
+
+================================================================================
+
+10. SEGURANCA
+--------------------------------------------------------------------------------
+
+- NUNCA armazena senha de Instagram ou redes sociais
+- Usa OAuth 2.0 (login oficial)
+- Tokens criptografados
+- Controle de permissoes por tenant
+- Separacao total de dados entre usuarios
+- Logs de auditoria para tudo
+- Aprovacao humana para acoes importantes
+- Revogacao de acesso a qualquer momento
+
+================================================================================
+
+11. O QUE JA FUNCIONA AGORA (MVP v0.1)
+--------------------------------------------------------------------------------
+
+✅ Receber comandos de texto e processar
+✅ Identificar intencao do usuario
+✅ Rotear para agente correto
+✅ Executar tarefa e retornar resultado
+✅ Emitir eventos para todo o sistema
+✅ Registrar tudo em audit log
+✅ Analise facial completa (IA real)
+✅ Analise de visagismo (IA real)
+✅ Colorimetria (IA real)
+✅ Expressoes (IA real)
+✅ Personal branding (IA real)
+✅ Gerar relatorios PDF
+✅ Multi-tenant (varias agencias)
+✅ Autenticacao JWT
+✅ Upload de fotos
+✅ Banco de dados completo
+✅ API REST documentada
+✅ Testes unitarios
+
+12. O QUE VEM NAS PROXIMAS VERSOES
+--------------------------------------------------------------------------------
+
+v0.2 - GEMEO DIGITAL
+     - Fotos em multiplos angulos
+     - Simulacao realista de personagens
+     - "Como eu ficaria nesse papel?"
+
+v0.3 - CASTING INTELIGENTE
+     - Matching automatico perfil-vaga
+     - Candidatura automatizada
+     - Integracao com plataformas de casting
+
+v0.4 - SOCIAL BRAIN
+     - Geracao real de imagens com IA
+     - Legendas automaticas
+     - Carrosseis e Reels
+     - Publicacao automatica (com aprovacao)
+
+v0.5 - WHATSAPP REAL
+     - Integracao oficial WhatsApp Business API
+     - Botoes interativos reais
+     - Resposta por voz
+
+v0.6 - COMANDOS DE VOZ
+     - Falar com o Vision naturalmente
+     - Transcricao em tempo real
+     - Resposta por voz
+
+v0.7 - ANALYTICS AVANCADO
+     - Dashboard de performance
+     - Recomendacoes baseadas em dados
+     - Predicoes de mercado
+
+v0.8 - PORTAL DA AGENCIA
+     - Gestao de multiplos talentos
+     - Relatorios avancados
+     - Ferramentas de casting
+
+v1.0 - AGENTE AUTONOMO DE CARREIRA
+     - Vision opera de forma autonoma
+     - Toma decisoes inteligentes
+     - Gerencia carreira do profissional
+
+================================================================================
+
+13. EXEMPLOS DE USO
+--------------------------------------------------------------------------------
+
+CENARIO 1: Ator quer se candidatar a um casting
+---------------------------------------------
+Usuario: "Vision, tem algum casting para ator de 30 anos?"
+Vision: (OpportunityAgent busca)
+        "Encontrei 3 oportunidades. A mais compativel e:
+         'Protagonista serie policial' - 95% match
+         Precisa de foto dramatica e video de 30s"
+
+Usuario: "Prepara minha candidatura"
+Vision: (CastingAgent + DigitalTwinAgent)
+        1. Seleciona melhores fotos do portfolio
+        2. Gera simulacao do personagem
+        3. Prepara video de apresentacao
+        4. Organiza dados do perfil
+        5. Cria resposta personalizada
+        6. ENVIA PARA APROVACAO via WhatsApp
+
+Usuario: (no WhatsApp) [APROVAR]
+Vision: (CastingAgent)
+        Envia candidatura oficial
+        Registra no historico
+
+CENARIO 2: Modelo quer postar no Instagram
+-----------------------------------------
+Usuario: "Cria uma postagem minha estilo editorial"
+Vision: (SocialAgent)
+        1. Analisa perfil e estilo
+        2. Seleciona melhor foto do portfolio
+        3. Gera legenda editorial
+        4. Seleciona hashtags
+        5. Cria preview
+        6. ENVIA PARA APROVACAO via WhatsApp
+
+Usuario: (no WhatsApp) [ALTERAR] "Mais elegante, menos hashtags"
+Vision: (SocialAgent)
+        1. Interpreta feedback
+        2. Gera nova versao
+        3. Reenvia para aprovacao
+
+Usuario: (no WhatsApp) [APROVAR]
+Vision: (SocialAgent + InstagramConnector)
+        Publica no Instagram
+        Registra metricas
+
+CENARIO 3: Analise de perfil completa
+-------------------------------------
+Usuario: "Faz uma analise completa do meu perfil"
+Vision: (VisagismAgent + FacialAnalysis + Colorimetry + Branding)
+        1. Analisa todas as fotos do portfolio
+        2. Visagismo completo
+        3. Colorimetria pessoal
+        4. Expressoes catalogadas
+        5. Personal branding
+        6. Grooming
+        7. Gera relatorio PDF profissional
+        8. Envia para download
+
+================================================================================
+
+14. RESUMO EXECUTIVO
+--------------------------------------------------------------------------------
+
+O Vision Ecosystem e uma plataforma que usa inteligencia artificial para
+automatizar e potencializar a carreira de profissionais de imagem.
+
+Em vez de o ator/modelo precisar:
+- Ficar procurando casting manualmente
+- Criar conteudo para redes sociais todo dia
+- Decidir qual foto usar
+- Escrever legendas
+- Se candidatar a vagas
+- Analisar seu proprio perfil
+
+O Vision faz tudo isso automaticamente, mas sempre com aprovacao humana
+final. O profissional mantem o controle, mas nao precisa fazer o trabalho
+repetitivo.
+
+A arquitetura e modular: cada funcionalidade e um "mini cerebro" que pode
+ser melhorado ou substituido. O sistema nao depende de nenhuma empresa ou
+tecnologia unica.
+
+A memoria do sistema aprende com o tempo: sabe o que funcionou, o que nao
+funcionou, as preferencias do usuario, e usa isso para melhorar recomendacoes.
+
+================================================================================
+  Documento gerado em: 2026-08-13
+  Versao: Vision Core v0.1
+================================================================================

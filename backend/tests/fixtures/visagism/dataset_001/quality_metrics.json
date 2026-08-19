@@ -1,0 +1,82 @@
+[
+  {
+    "file": "01_frontal_neutra_close.jpg",
+    "width": 1152,
+    "height": 1536,
+    "sharpness_laplacian_var": 21.7,
+    "brightness": 0.377,
+    "contrast": 0.248
+  },
+  {
+    "file": "02_frontal_neutra.jpg",
+    "width": 1152,
+    "height": 1536,
+    "sharpness_laplacian_var": 33.6,
+    "brightness": 0.404,
+    "contrast": 0.255
+  },
+  {
+    "file": "03_tres_quartos_A.jpg",
+    "width": 1152,
+    "height": 1536,
+    "sharpness_laplacian_var": 54.7,
+    "brightness": 0.418,
+    "contrast": 0.275
+  },
+  {
+    "file": "04_tres_quartos_B.jpg",
+    "width": 1152,
+    "height": 1536,
+    "sharpness_laplacian_var": 16.3,
+    "brightness": 0.408,
+    "contrast": 0.276
+  },
+  {
+    "file": "05_perfil_A.jpg",
+    "width": 1152,
+    "height": 1536,
+    "sharpness_laplacian_var": 99.8,
+    "brightness": 0.424,
+    "contrast": 0.263
+  },
+  {
+    "file": "06_perfil_B.jpg",
+    "width": 1152,
+    "height": 1536,
+    "sharpness_laplacian_var": 37.8,
+    "brightness": 0.408,
+    "contrast": 0.263
+  },
+  {
+    "file": "07_sorriso.jpg",
+    "width": 1152,
+    "height": 1536,
+    "sharpness_laplacian_var": 67.7,
+    "brightness": 0.435,
+    "contrast": 0.279
+  },
+  {
+    "file": "08_implantacao_referencia.jpg",
+    "width": 1152,
+    "height": 1536,
+    "sharpness_laplacian_var": 118.3,
+    "brightness": 0.428,
+    "contrast": 0.281
+  },
+  {
+    "file": "09_posterior.jpg",
+    "width": 1152,
+    "height": 1536,
+    "sharpness_laplacian_var": 16.8,
+    "brightness": 0.4,
+    "contrast": 0.308
+  },
+  {
+    "file": "10_meio_corpo.jpg",
+    "width": 1152,
+    "height": 1536,
+    "sharpness_laplacian_var": 274.3,
+    "brightness": 0.413,
+    "contrast": 0.281
+  }
+]
