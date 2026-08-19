@@ -6,7 +6,6 @@ only the hairstyle according to the structured visagism recommendation.
 
 from __future__ import annotations
 
-import base64
 import mimetypes
 from dataclasses import dataclass
 from pathlib import Path
@@ -157,7 +156,6 @@ class VisagismImageSimulator:
             value = data[0].get("b64_json")
             if value:
                 return value
-        # Defensive support for completed-event-like response shapes.
         value = payload.get("b64_json")
         if value:
             return value
@@ -170,13 +168,25 @@ class VisagismImageSimulator:
         display_name = recommendation.get("display_name") or recommendation.get(
             "name", "corte recomendado"
         )
-        barber = recommendation.get("barber_instructions") or {}
-        top = barber.get("top") or recommendation.get("volume_distribution", "")
-        sides = barber.get("sides_and_nape") or recommendation.get(
-            "side_treatment", ""
-        )
-        fringe = barber.get("fringe") or recommendation.get("forehead_exposure", "")
-        finish = barber.get("finish") or "textura natural e acabamento realista"
+        barber = recommendation.get("barber_instructions") or ""
+        if isinstance(barber, dict):
+            top = barber.get("top") or recommendation.get("volume_distribution", "")
+            sides = barber.get("sides_and_nape") or recommendation.get(
+                "side_treatment", ""
+            )
+            fringe = barber.get("fringe") or recommendation.get(
+                "forehead_exposure", ""
+            )
+            finish = barber.get("finish") or recommendation.get("styling", "")
+            instructions = (
+                f"Topo: {top}. Laterais e nuca: {sides}. "
+                f"Franja/frontal: {fringe}. Acabamento: {finish}."
+            )
+        else:
+            instructions = str(barber)
+            styling = recommendation.get("styling")
+            if styling:
+                instructions = f"{instructions} Finalizacao: {styling}."
 
         return (
             "Edite SOMENTE o cabelo da pessoa desta fotografia. Preserve com alta "
@@ -186,7 +196,6 @@ class VisagismImageSimulator:
             "realista de barbearia/cabeleireiro. "
             f"Corte recomendado: {display_name}. "
             f"Formato facial considerado: {face_shape or 'nao informado'}. "
-            f"Topo: {top}. Laterais e nuca: {sides}. Franja/frontal: {fringe}. "
-            f"Acabamento: {finish}. "
+            f"Instrucoes tecnicas: {instructions} "
             "A implantacao capilar deve permanecer plausivel para a pessoa da foto."
         )
