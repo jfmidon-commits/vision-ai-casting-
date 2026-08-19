@@ -1,11 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAnalyses } from "@/hooks/use-analyses";
-import { Brain, Clock, CheckCircle, AlertCircle, Play } from "lucide-react";
+import { Brain, Clock, CheckCircle, AlertCircle } from "lucide-react";
 
 export default function AnalysesPage() {
   const { data: analyses, isLoading } = useAnalyses();
@@ -112,7 +112,12 @@ export default function AnalysesPage() {
                         </span>
                       )}
                       {getStatusBadge(analysis.status)}
-                      <Button variant="ghost" size="sm">Ver</Button>
+                      <Link
+                        href={`/analyses/${analysis.id}`}
+                        className="rounded-md px-3 py-2 text-sm font-medium hover:bg-accent"
+                      >
+                        Ver
+                      </Link>
                     </div>
                   </div>
                 ))}
