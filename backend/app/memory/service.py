@@ -72,25 +72,11 @@ class MemoryService:
         category: str = "general",
         ttl_days: Optional[int] = None,
     ) -> UserMemory:
-        """
-        Armazena um valor na memória persistente do usuário.
-
-        Args:
-            db: Sessão do banco de dados
-            user_id: ID do usuário
-            key: Chave da memória
-            value: Valor a ser armazenado (serializável em JSON)
-            category: Categoria da memória
-            ttl_days: Dias até expiração (None = sem expiração)
-
-        Returns:
-            UserMemory: Registro criado/atualizado
-        """
+        """Armazena um valor na memória persistente do usuário."""
         expires_at = None
         if ttl_days:
             expires_at = datetime.utcnow() + timedelta(days=ttl_days)
 
-        # Upsert: atualiza se existe, cria se não
         stmt = (
             insert(UserMemory)
             .values(
@@ -116,13 +102,11 @@ class MemoryService:
         await db.execute(stmt)
         await db.commit()
 
-        # Atualizar cache
         cache_key = self._cache_key(user_id, key, category)
         self._set_cache(cache_key, value)
 
         logger.info(f"Memory stored for user {user_id}: {key} (category: {category})")
 
-        # Retornar o registro
         result = await db.execute(
             select(UserMemory).where(
                 and_(UserMemory.user_id == user_id, UserMemory.memory_key == key)
@@ -137,27 +121,14 @@ class MemoryService:
         key: str,
         category: str = "general",
     ) -> Optional[Any]:
-        """
-        Recupera um valor da memória do usuário.
-
-        Args:
-            db: Sessão do banco de dados
-            user_id: ID do usuário
-            key: Chave da memória
-            category: Categoria da memória
-
-        Returns:
-            Valor armazenado ou None
-        """
+        """Recupera um valor da memória do usuário."""
         cache_key = self._cache_key(user_id, key, category)
 
-        # Tentar cache primeiro
         cached = self._get_from_cache(cache_key)
         if cached is not None:
             logger.debug(f"Memory cache hit for user {user_id}: {key}")
             return cached
 
-        # Buscar no banco
         result = await db.execute(
             select(UserMemory).where(
                 and_(
@@ -188,6 +159,7 @@ class MemoryService:
         category: Optional[str] = None,
         limit: int = 100,
     ) -> Dict[str, Any]:
+        """Retorna toda a memória ativa de um usuário."""
         query = select(UserMemory).where(
             and_(
                 UserMemory.user_id == user_id,
@@ -202,6 +174,7 @@ class MemoryService:
             query = query.where(UserMemory.category == category)
 
         query = query.order_by(desc(UserMemory.updated_at)).limit(limit)
+
         result = await db.execute(query)
         memories = result.scalars().all()
 
@@ -222,19 +195,33 @@ class MemoryService:
             "user_id": str(user_id),
         }
 
-    async def delete_memory(self, db: AsyncSession, user_id: UUID, key: str) -> bool:
+    async def delete_memory(
+        self,
+        db: AsyncSession,
+        user_id: UUID,
+        key: str,
+    ) -> bool:
+        """Remove uma memória específica."""
         result = await db.execute(
             select(UserMemory).where(
                 and_(UserMemory.user_id == user_id, UserMemory.memory_key == key)
             )
         )
         memory = result.scalar_one_or_none()
-        if not memory:
-            return False
-        await db.delete(memory)
-        await db.commit()
-        self._invalidate_cache(user_id)
-        return True
+
+        if memory:
+            await db.delete(memory)
+            await db.commit()
+
+            cache_key = self._cache_key(user_id, key, memory.category)
+            if cache_key in self._cache:
+                del self._cache[cache_key]
+                del self._cache_ttl[cache_key]
+
+            logger.info(f"Memory deleted for user {user_id}: {key}")
+            return True
+
+        return False
 
     async def add_feedback(
         self,
@@ -242,22 +229,40 @@ class MemoryService:
         user_id: UUID,
         item_type: str,
         item_id: str,
-        feedback_text: Optional[str] = None,
+        feedback: str,
         rating: Optional[int] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: Optional[Dict] = None,
     ) -> UserFeedback:
-        feedback = UserFeedback(
+        """Adiciona feedback do usuário sobre um item."""
+        feedback_record = UserFeedback(
             user_id=user_id,
             item_type=item_type,
             item_id=item_id,
-            feedback_text=feedback_text,
+            feedback_text=feedback,
             rating=rating,
-            _metadata=metadata or {},
+            metadata=metadata or {},
         )
-        db.add(feedback)
+
+        db.add(feedback_record)
         await db.commit()
-        await db.refresh(feedback)
-        return feedback
+        await db.refresh(feedback_record)
+
+        await self.store(
+            db=db,
+            user_id=user_id,
+            key=f"feedback_{item_type}_{item_id}",
+            value={
+                "feedback": feedback,
+                "rating": rating,
+                "item_type": item_type,
+                "item_id": item_id,
+                "feedback_id": str(feedback_record.id),
+            },
+            category="feedback",
+        )
+
+        logger.info(f"Feedback added for user {user_id} on {item_type}:{item_id}")
+        return feedback_record
 
     async def get_feedback(
         self,
@@ -265,13 +270,80 @@ class MemoryService:
         user_id: UUID,
         item_type: Optional[str] = None,
         item_id: Optional[str] = None,
-        limit: int = 100,
-    ) -> List[UserFeedback]:
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        """Recupera feedbacks do usuário."""
         query = select(UserFeedback).where(UserFeedback.user_id == user_id)
+
         if item_type:
             query = query.where(UserFeedback.item_type == item_type)
         if item_id:
             query = query.where(UserFeedback.item_id == item_id)
+
         query = query.order_by(desc(UserFeedback.created_at)).limit(limit)
+
         result = await db.execute(query)
-        return list(result.scalars().all())
+        feedbacks = result.scalars().all()
+
+        return [
+            {
+                "id": str(f.id),
+                "item_type": f.item_type,
+                "item_id": f.item_id,
+                "feedback": f.feedback_text,
+                "rating": f.rating,
+                "metadata": f.metadata,
+                "created_at": f.created_at.isoformat() if f.created_at else None,
+            }
+            for f in feedbacks
+        ]
+
+    async def get_preferences(
+        self,
+        db: AsyncSession,
+        user_id: UUID,
+    ) -> Dict[str, Any]:
+        """Recupera preferências consolidadas do usuário."""
+        prefs = await self.get_user_memory(db, user_id, category="preferences")
+
+        consolidated = {}
+        for mem in prefs.get("memories", []):
+            consolidated[mem["key"]] = mem["value"]
+
+        return consolidated
+
+    async def set_preference(
+        self,
+        db: AsyncSession,
+        user_id: UUID,
+        preference_key: str,
+        value: Any,
+    ) -> UserMemory:
+        """Define uma preferência do usuário."""
+        return await self.store(
+            db=db,
+            user_id=user_id,
+            key=preference_key,
+            value=value,
+            category="preferences",
+        )
+
+    async def cleanup_expired(self, db: AsyncSession) -> int:
+        """Remove memórias expiradas."""
+        result = await db.execute(
+            select(UserMemory).where(
+                and_(
+                    UserMemory.expires_at.isnot(None),
+                    UserMemory.expires_at < datetime.utcnow(),
+                )
+            )
+        )
+        expired = result.scalars().all()
+
+        count = len(expired)
+        for mem in expired:
+            await db.delete(mem)
+
+        await db.commit()
+        logger.info(f"Cleaned up {count} expired memories")
+        return count
