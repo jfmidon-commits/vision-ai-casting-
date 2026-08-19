@@ -18,6 +18,15 @@ on:
       - 'backend/tests/test_visagism_benchmark.py'
       - '.github/workflows/visagism-benchmark.yml'
 
+  pull_request:
+    paths:
+      - 'backend/app/ai/visagism/**'
+      - 'backend/app/ai/image_triage/**'
+      - 'backend/app/ai/mediapipe/**'
+      - 'backend/tests/fixtures/visagism/**'
+      - 'backend/tests/test_visagism_benchmark.py'
+      - '.github/workflows/visagism-benchmark.yml'
+
 env:
   PYTHON_VERSION: "3.11"
 
