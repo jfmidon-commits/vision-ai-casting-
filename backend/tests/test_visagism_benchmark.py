@@ -1,17 +1,29 @@
-"""Benchmark ponta a ponta para o ImageTriageEngine atual.
+"""Benchmark real do dataset de referência do Visagism.
 
-Este teste acompanha a API assíncrona definida em app.ai.image_triage:
-ImageTriageEngine.triage(TriageInput) -> TriageResult.
+Valida três camadas independentes e complementares:
+1. ImageTriageEngine e cobertura do protocolo de fotos.
+2. MediaPipe FaceMesh + VisagismMeasurementEngine sobre foto real do dataset.
+3. VisagismRuleEngine gerando recomendação principal + quatro alternativas.
+
+Os artefatos gerados em backend/benchmark_output permitem auditar o resultado
+sem depender apenas do status verde/vermelho do pytest.
 """
 
 import json
 import os
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
+from PIL import Image
 
 from app.ai.image_triage.engine import ImageTriageEngine
 from app.ai.image_triage.schemas import FaceAngle, TriageInput, TriageResult
+from app.ai.mediapipe.analyzer import MediaPipeService
+from app.ai.visagism.evidence_tracker import EvidenceTracker
+from app.ai.visagism.measurement_engine import VisagismMeasurementEngine
+from app.ai.visagism.rule_engine import VisagismRuleEngine
+from app.ai.visagism.schemas import FaceShape, PhotoAngle
 
 
 @pytest.fixture
@@ -38,6 +50,19 @@ def benchmark_output_dir():
     return output_dir
 
 
+@pytest.fixture
+def frontal_image_path(dataset_path):
+    require_dataset(dataset_path)
+    preferred = Path(dataset_path) / "01_frontal_neutra_close.jpg"
+    if preferred.exists():
+        return preferred
+
+    candidates = sorted(Path(dataset_path).glob("*frontal*.jpg"))
+    if not candidates:
+        pytest.skip("Dataset não contém foto frontal para validar FaceMesh")
+    return candidates[0]
+
+
 def require_dataset(dataset_path: str) -> None:
     if not os.path.isdir(dataset_path):
         pytest.skip("Dataset de benchmark não disponível")
@@ -51,6 +76,13 @@ def require_dataset(dataset_path: str) -> None:
 async def run_triage(engine: ImageTriageEngine, dataset_path: str) -> TriageResult:
     require_dataset(dataset_path)
     return await engine.triage(TriageInput(source_dir=dataset_path))
+
+
+def as_json_value(value):
+    """Converte enums/modelos simples em valor serializável para artefatos."""
+    if hasattr(value, "value"):
+        return value.value
+    return value
 
 
 class TestSchemaContract:
@@ -132,3 +164,138 @@ class TestImageTriageBenchmark:
         with open(output_path, "w", encoding="utf-8") as handle:
             json.dump(summary, handle, indent=2, ensure_ascii=False)
         assert os.path.exists(output_path)
+
+
+class TestRealFaceMeshAndVisagism:
+    @pytest.mark.asyncio
+    async def test_facemesh_returns_complete_real_landmarks(
+        self, frontal_image_path, benchmark_output_dir
+    ):
+        service = MediaPipeService()
+        with Image.open(frontal_image_path) as source:
+            image = source.convert("RGB")
+            result = await service.analyze_face_mesh(image)
+
+        assert not result.get("error"), result.get("error")
+        assert result.get("landmarks_count", 0) >= 468
+        assert len(result.get("landmarks", [])) >= 468
+        assert "note" not in result, "FaceMesh não pode retornar biometria mock"
+        assert 0.0 <= result.get("symmetry_score", 0.0) <= 1.0
+        assert result.get("face_shape") not in {None, "unknown"}
+
+        artifact = {
+            "dataset_image": frontal_image_path.name,
+            "landmarks_count": result["landmarks_count"],
+            "symmetry_score": result.get("symmetry_score"),
+            "facial_proportions": result.get("facial_proportions", {}),
+            "face_shape": result.get("face_shape"),
+            "eye_aspect_ratio": result.get("eye_aspect_ratio"),
+            "mouth_aspect_ratio": result.get("mouth_aspect_ratio"),
+            "mock_data": False,
+        }
+        output_path = Path(benchmark_output_dir) / "facemesh_result.json"
+        output_path.write_text(
+            json.dumps(artifact, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+
+    @pytest.mark.asyncio
+    async def test_measurements_and_five_haircut_recommendations(
+        self, frontal_image_path, benchmark_output_dir
+    ):
+        measurement_engine = VisagismMeasurementEngine()
+        tracker = EvidenceTracker()
+        photo_id = uuid4()
+
+        with Image.open(frontal_image_path) as source:
+            image = source.convert("RGB")
+            measured = await measurement_engine.measure_photo(
+                photo_id=photo_id,
+                image=image,
+                angle=PhotoAngle.FRONT_NEUTRAL,
+                tracker=tracker,
+            )
+
+        assert measured.get("success"), measured.get("error")
+        assert measured.get("landmarks_count", 0) >= 468
+        assert len(measured.get("measurements", [])) >= 10
+        assert len(measured.get("proportions", [])) >= 6
+        assert measured.get("face_shape") != FaceShape.UNKNOWN
+        assert 0.0 <= measured.get("symmetry_score", 0.0) <= 1.0
+
+        proportions = {
+            p.name: {
+                "value": p.value,
+                "classification": getattr(p, "classification", "unknown"),
+            }
+            for p in measured.get("proportions", [])
+        }
+
+        recommendation_tracker = EvidenceTracker()
+        primary, alternatives, discouraged = VisagismRuleEngine().generate_recommendations(
+            face_shape=measured["face_shape"],
+            proportions=proportions,
+            regions=measured.get("regions", {}),
+            hair={},
+            asymmetries={},
+            profile_context={},
+            tracker=recommendation_tracker,
+        )
+
+        assert primary is not None
+        assert primary.rank == 1
+        assert len(alternatives) == 4
+        assert [item.rank for item in alternatives] == [2, 3, 4, 5]
+        assert discouraged
+
+        recommendations = [primary] + alternatives
+        assert len(recommendations) == 5
+        assert len({item.name for item in recommendations}) == 5
+        for item in recommendations:
+            assert item.justification
+            assert 0.0 <= item.confidence <= 1.0
+
+        artifact = {
+            "dataset_image": frontal_image_path.name,
+            "face_shape": as_json_value(measured["face_shape"]),
+            "symmetry_score": measured.get("symmetry_score"),
+            "landmarks_count": measured.get("landmarks_count"),
+            "measurements": {
+                m.name: m.value for m in measured.get("measurements", [])
+            },
+            "proportions": {
+                p.name: {
+                    "value": p.value,
+                    "classification": as_json_value(
+                        getattr(p, "classification", "unknown")
+                    ),
+                }
+                for p in measured.get("proportions", [])
+            },
+            "recommendations": [
+                {
+                    "rank": item.rank,
+                    "name": item.name,
+                    "justification": item.justification,
+                    "confidence": item.confidence,
+                    "volume_distribution": item.volume_distribution,
+                    "forehead_exposure": as_json_value(
+                        item.forehead_exposure_recommendation
+                    ),
+                    "side_treatment": as_json_value(item.side_treatment),
+                }
+                for item in recommendations
+            ],
+            "discouraged_cuts": [
+                {
+                    "name": item.name,
+                    "reason": item.reason,
+                    "alternative": item.alternative,
+                    "confidence": item.confidence,
+                }
+                for item in discouraged
+            ],
+        }
+        output_path = Path(benchmark_output_dir) / "visagism_result.json"
+        output_path.write_text(
+            json.dumps(artifact, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
