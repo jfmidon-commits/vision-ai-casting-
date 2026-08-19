@@ -156,3 +156,5 @@ pytest app/tests/ -v
 
 ### v1.0 Autonomous Career Agent
 - Agente autônomo completo
+
+<!-- CI validation: current main after analyzer fixes -->
