@@ -25,6 +25,7 @@ jobs:
   live-image-edit:
     name: Live OpenAI Image Edit
     runs-on: ubuntu-latest
+    environment: production
     timeout-minutes: 10
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -43,7 +44,7 @@ jobs:
         shell: bash
         run: |
           if [ -z "${OPENAI_API_KEY:-}" ]; then
-            echo "::error::LIVE_SMOKE_BLOCKED: OPENAI_API_KEY is not configured as a GitHub Actions secret."
+            echo "::error::LIVE_SMOKE_BLOCKED: OPENAI_API_KEY is not configured in repository or production environment secrets."
             exit 2
           fi
           echo "OPENAI_API_KEY is present (value intentionally hidden)."
