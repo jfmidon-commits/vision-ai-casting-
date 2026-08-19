@@ -9,6 +9,9 @@ on:
         default: 'backend/tests/fixtures/visagism/dataset_001'
         type: string
 
+  schedule:
+    - cron: '5 8 * * *'
+
   push:
     paths:
       - 'backend/app/ai/visagism/**'
