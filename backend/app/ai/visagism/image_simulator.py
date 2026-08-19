@@ -143,7 +143,15 @@ class VisagismImageSimulator:
                 },
                 files={"image": (filename, image_bytes, content_type)},
             )
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                detail = response.text.strip()
+                if len(detail) > 2000:
+                    detail = detail[:2000] + "..."
+                raise RuntimeError(
+                    f"OpenAI image edit HTTP {response.status_code}: {detail or 'sem corpo'}"
+                ) from exc
             return response.json()
         finally:
             if owns_client:
