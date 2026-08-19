@@ -10,13 +10,8 @@ quanto uma camada de apresentacao pronta para usuario/barbeiro.
 import logging
 from typing import Any, Dict, List, Optional
 
-from app.agents.base import (
-    AgentCapability,
-    AgentContext,
-    AgentResult,
-    AgentStatus,
-    VisionAgent,
-)
+from app.agents.base import AgentCapability, AgentContext, AgentResult, VisionAgent
+from app.ai.visagism.compatible_rule_engine import CompatibleVisagismRuleEngine
 from app.ai.visagism.pipeline import VisagismPipeline
 from app.ai.visagism.recommendation_presenter import (
     present_recommendation,
@@ -45,13 +40,17 @@ class VisagismAgent(VisionAgent):
     def __init__(self):
         super().__init__(
             name="VisagismAgent",
-            description="Agente de analise de visagismo capilar com pipeline hibrido proprietario",
+            description=(
+                "Agente de analise de visagismo capilar com pipeline hibrido "
+                "proprietario"
+            ),
             capabilities=[
                 AgentCapability.VISAGISM_ANALYSIS,
                 AgentCapability.STYLE_RECOMMENDATION,
             ],
         )
         self.pipeline = VisagismPipeline()
+        self.pipeline.rule_engine = CompatibleVisagismRuleEngine()
         self.event_bus = EventBus()
 
     def can_handle(self, context: AgentContext) -> bool:
@@ -179,7 +178,9 @@ class VisagismAgent(VisionAgent):
             current_hair_texture=profile_data.get("current_hair_texture"),
             facial_hair=profile_data.get("facial_hair"),
             style_preferences=profile_data.get("style_preferences", []),
-            previous_visagism_analyses=profile_data.get("previous_visagism_analyses", []),
+            previous_visagism_analyses=profile_data.get(
+                "previous_visagism_analyses", []
+            ),
             approved_appearances=profile_data.get("approved_appearances", []),
         )
 
@@ -219,7 +220,9 @@ class VisagismAgent(VisionAgent):
         alternatives_user: List[Dict[str, Any]] = []
         if result.primary_recommendation:
             primary_user = present_recommendation(result.primary_recommendation)
-            alternatives_user = present_recommendations(result.alternative_recommendations)
+            alternatives_user = present_recommendations(
+                result.alternative_recommendations
+            )
             message = (
                 "Analise de visagismo concluida. "
                 f"Recomendacao principal: {primary_user['display_name']} "
@@ -232,12 +235,18 @@ class VisagismAgent(VisionAgent):
             )
 
         user_facing = {
-            "face_shape": getattr(result.face_shape_category, "value", result.face_shape_category),
+            "face_shape": getattr(
+                result.face_shape_category,
+                "value",
+                result.face_shape_category,
+            ),
             "face_shape_confidence": result.face_shape_confidence,
             "overall_confidence": result.overall_confidence,
             "primary_recommendation": primary_user,
             "alternative_recommendations": alternatives_user,
-            "recommendations": ([primary_user] if primary_user else []) + alternatives_user,
+            "recommendations": (
+                ([primary_user] if primary_user else []) + alternatives_user
+            ),
             "hair_data_complete": (
                 bool(primary_user) and primary_user.get("hair_data_complete", False)
             ),
@@ -280,7 +289,9 @@ class VisagismAgent(VisionAgent):
                             result.face_shape_category,
                         ),
                         "confidence": result.overall_confidence,
-                        "timestamp": __import__("datetime").datetime.utcnow().isoformat(),
+                        "timestamp": __import__(
+                            "datetime"
+                        ).datetime.utcnow().isoformat(),
                     },
                 )
 
@@ -289,9 +300,13 @@ class VisagismAgent(VisionAgent):
                 appearance={
                     "type": "visagism_analysis",
                     "analysis_id": (
-                        context.metadata.get("analysis_id") if context.metadata else None
+                        context.metadata.get("analysis_id")
+                        if context.metadata
+                        else None
                     ),
-                    "result_summary": result.human_report[:500] if result.human_report else "",
+                    "result_summary": (
+                        result.human_report[:500] if result.human_report else ""
+                    ),
                 },
             )
         except Exception as exc:
