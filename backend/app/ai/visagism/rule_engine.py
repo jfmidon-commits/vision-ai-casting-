@@ -94,7 +94,7 @@ class VisagismRuleEngine:
                 "principle": "Adicionar largura nas laterais; reduzir percepcao de comprimento",
                 "volume": "Volume horizontal nas laterais",
                 "forehead": ForeheadExposure.PARTIAL,
-                "side": SideTreatment.VOLUME_ON_SIDES,
+                "side": SideTreatment.LAYERED,
             },
             FaceShape.TRIANGULAR: {
                 "compatible": [
@@ -149,7 +149,6 @@ class VisagismRuleEngine:
         """
         shape_rule = self._shape_rules.get(face_shape, self._shape_rules[FaceShape.UNKNOWN])
 
-        # Registrar evidencia de formato
         shape_eid = tracker.register(
             category="interpretation",
             description=f"Formato facial: {face_shape.value}",
@@ -158,7 +157,6 @@ class VisagismRuleEngine:
             confidence=0.8 if face_shape != FaceShape.UNKNOWN else 0.4,
         )
 
-        # Determinar textura e espessura
         texture_str = hair.get("texture", "unknown")
         thickness_str = hair.get("thickness", "unknown")
 
@@ -172,7 +170,6 @@ class VisagismRuleEngine:
         except ValueError:
             thickness = HairThickness.UNKNOWN
 
-        # Registrar evidencia de cabelo
         hair_eid = tracker.register(
             category="observation",
             description=f"Cabelo: textura={texture.value}, espessura={thickness.value}",
@@ -181,7 +178,6 @@ class VisagismRuleEngine:
             confidence=0.6 if texture != HairTexture.UNKNOWN else 0.3,
         )
 
-        # Analisar proporcoes
         prop_adjustments = self._analyze_proportions(proportions)
         prop_eids = []
         for adj in prop_adjustments:
@@ -194,11 +190,9 @@ class VisagismRuleEngine:
             )
             prop_eids.append(eid)
 
-        # Compilar listas
         compatible = list(shape_rule["compatible"])
         avoid = list(shape_rule["avoid"])
 
-        # Ajustar por textura
         if texture == HairTexture.CURLY or texture == HairTexture.COILY:
             compatible = [c for c in compatible if c not in ["blunt_bob", "precision_cut"]]
             avoid.extend(["razor_cut", "thinning_heavy"])
@@ -206,7 +200,6 @@ class VisagismRuleEngine:
             compatible = [c for c in compatible if c not in ["heavy_layering"]]
             avoid.extend(["over_texturizing"])
 
-        # Ajustar por espessura
         if thickness == HairThickness.FINE:
             compatible = [c for c in compatible if c not in ["heavy_undercut"]]
             avoid.extend(["over_layering", "too_much_texturizing"])
@@ -214,7 +207,6 @@ class VisagismRuleEngine:
             compatible = [c for c in compatible if c not in ["pixie_with_volume"]]
             avoid.extend(["volume_techniques", "round_shapes"])
 
-        # Dados insuficientes
         if face_shape == FaceShape.UNKNOWN and not proportions:
             tracker.link_conclusion("insufficient_data", [shape_eid, hair_eid])
             primary = self._create_fallback(face_shape, shape_rule, tracker, [shape_eid, hair_eid])
@@ -226,7 +218,6 @@ class VisagismRuleEngine:
             ]
             return primary, alternatives, []
 
-        # Recomendacao principal (rank=1)
         primary_name = compatible[0] if compatible else "layered_cut"
         primary = self._create_recommendation(
             name=primary_name,
@@ -240,7 +231,6 @@ class VisagismRuleEngine:
         )
         tracker.link_conclusion(f"primary_{primary_name}", [shape_eid, hair_eid] + prop_eids)
 
-        # Alternativas (ranks 2-5, max 4)
         alternatives = []
         alt_names = [c for c in compatible[1:5] if c != primary_name]
         fallbacks = ["soft_layers", "medium_length", "classic_bob", "textured_ends"]
@@ -264,7 +254,6 @@ class VisagismRuleEngine:
             tracker.link_conclusion(f"alternative_{alt_name}", [shape_eid, hair_eid])
             alternatives.append(alt)
 
-        # Cortes desaconselhados
         discouraged = []
         for disc_name in avoid[:5]:
             disc = DiscouragedCut(

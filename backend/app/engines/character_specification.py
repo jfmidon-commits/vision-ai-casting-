@@ -7,10 +7,10 @@ Saida: CharacterSpecification estruturado
 NAO gera imagem - apenas estrutura a especificacao para envio ao provider.
 """
 
-from typing import Dict, List, Any, Optional
-from dataclasses import dataclass, field
-from uuid import UUID
 import re
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
+from uuid import UUID
 
 from app.utils.logger import get_logger
 
@@ -59,6 +59,7 @@ class EnvironmentContext:
 @dataclass
 class CharacterSpecification:
     """Especificacao estruturada de personagem."""
+
     character: CharacterArchetype
     appearance_changes: AppearanceChanges
     wardrobe: Wardrobe
@@ -75,12 +76,14 @@ class CharacterSpecification:
                 "expression": self.character.expression,
             },
             "appearance_changes": {
-                k: v for k, v in {
+                key: value
+                for key, value in {
                     "beard": self.appearance_changes.beard,
                     "hair": self.appearance_changes.hair,
                     "makeup": self.appearance_changes.makeup,
                     "body": self.appearance_changes.body,
-                }.items() if v is not None
+                }.items()
+                if value is not None
             },
             "wardrobe": {
                 "type": self.wardrobe.type,
@@ -106,36 +109,62 @@ class CharacterSpecification:
 
 
 class CharacterSpecificationEngine:
-    """
-    Engine de especificacao de personagem.
-    Transforma linguagem natural em especificacao estruturada.
-    """
-
     ARCHETYPES = {
-        "executivo": "executive", "executive": "executive", "ceo": "executive",
-        "empresario": "executive", "businessman": "executive", "businesswoman": "executive",
-        "artista": "artist", "artist": "artist", "pintor": "artist", "musico": "artist",
-        "atleta": "athlete", "athlete": "athlete", "esportista": "athlete",
-        "vilao": "villain", "villain": "villain", "antagonista": "villain",
-        "heroi": "hero", "hero": "hero", "protagonista": "hero",
-        "cientista": "scientist", "scientist": "scientist",
-        "medico": "doctor", "doctor": "doctor", "medica": "doctor",
-        "policial": "police", "police": "police", "detetive": "police",
-        "militar": "military", "military": "military", "soldado": "military",
-        "professor": "teacher", "teacher": "teacher", "academico": "teacher",
+        "executivo": "executive",
+        "executive": "executive",
+        "ceo": "executive",
+        "empresario": "executive",
+        "businessman": "executive",
+        "businesswoman": "executive",
+        "artista": "artist",
+        "artist": "artist",
+        "pintor": "artist",
+        "musico": "artist",
+        "atleta": "athlete",
+        "athlete": "athlete",
+        "esportista": "athlete",
+        "vilao": "villain",
+        "villain": "villain",
+        "antagonista": "villain",
+        "heroi": "hero",
+        "hero": "hero",
+        "protagonista": "hero",
+        "cientista": "scientist",
+        "scientist": "scientist",
+        "medico": "doctor",
+        "doctor": "doctor",
+        "medica": "doctor",
+        "policial": "police",
+        "police": "police",
+        "detetive": "police",
+        "militar": "military",
+        "military": "military",
+        "soldado": "military",
+        "professor": "teacher",
+        "teacher": "teacher",
+        "academico": "teacher",
     }
-
     EXPRESSIONS = {
-        "serio": "serious", "seria": "serious", "serious": "serious",
-        "feliz": "happy", "happy": "happy", "sorridente": "happy",
-        "triste": "sad", "sad": "sad",
-        "intenso": "intense", "intense": "intense",
-        "contemplativo": "contemplative", "contemplative": "contemplative",
-        "neutro": "neutral", "neutral": "neutral",
-        "raiva": "angry", "angry": "angry", "furioso": "angry",
-        "surpreso": "surprised", "surprised": "surprised",
+        "serio": "serious",
+        "seria": "serious",
+        "serious": "serious",
+        "feliz": "happy",
+        "happy": "happy",
+        "sorridente": "happy",
+        "triste": "sad",
+        "sad": "sad",
+        "intenso": "intense",
+        "intense": "intense",
+        "contemplativo": "contemplative",
+        "contemplative": "contemplative",
+        "neutro": "neutral",
+        "neutral": "neutral",
+        "raiva": "angry",
+        "angry": "angry",
+        "furioso": "angry",
+        "surpreso": "surprised",
+        "surprised": "surprised",
     }
-
     BEARD_TYPES = {
         "barba de tres dias": {"type": "stubble", "length_days": 3},
         "barba de 3 dias": {"type": "stubble", "length_days": 3},
@@ -146,22 +175,40 @@ class CharacterSpecificationEngine:
         "sem barba": {"type": "clean_shaven", "length_days": 0},
         "bigode": {"type": "mustache_only", "length_days": 14},
     }
-
     WARDROBE_TYPES = {
-        "terno": "business_suit", "terno escuro": "business_suit",
-        "business_suit": "business_suit", "suit": "business_suit",
-        "casual": "casual", "roupa casual": "casual",
-        "formal": "formal", "roupa formal": "formal",
-        "esportivo": "athletic", "athletic": "athletic",
-        "uniforme": "uniform", "uniform": "uniform",
-        "fantasia": "costume", "costume": "costume",
+        "terno escuro": "business_suit",
+        "terno": "business_suit",
+        "business_suit": "business_suit",
+        "suit": "business_suit",
+        "roupa esportiva": "athletic",
+        "roupa esportivo": "athletic",
+        "esportiva": "athletic",
+        "esportivo": "athletic",
+        "athletic": "athletic",
+        "jaleco branco": "uniform",
+        "jaleco": "uniform",
+        "uniforme": "uniform",
+        "uniform": "uniform",
+        "roupa casual": "casual",
+        "casual": "casual",
+        "roupa formal": "formal",
+        "formal": "formal",
+        "fantasia": "costume",
+        "costume": "costume",
     }
-
     WARDROBE_TONES = {
-        "escuro": "dark", "dark": "dark", "escura": "dark",
-        "claro": "light", "light": "light", "clara": "light",
-        "vibrante": "vibrant", "vibrant": "vibrant",
-        "neutro": "neutral", "neutral": "neutral",
+        "escuro": "dark",
+        "dark": "dark",
+        "escura": "dark",
+        "branco": "light",
+        "branca": "light",
+        "claro": "light",
+        "light": "light",
+        "clara": "light",
+        "vibrante": "vibrant",
+        "vibrant": "vibrant",
+        "neutro": "neutral",
+        "neutral": "neutral",
     }
 
     def __init__(self):
@@ -173,41 +220,36 @@ class CharacterSpecificationEngine:
         profile_id: Optional[UUID] = None,
         identity_traits: Optional[Dict] = None,
     ) -> CharacterSpecification:
-        """Transforma solicitacao natural em especificacao estruturada."""
         text_lower = natural_language.lower()
-
-        archetype = self._extract_archetype(text_lower)
-        expression = self._extract_expression(text_lower)
-        age_presentation = self._extract_age_presentation(text_lower)
-
         character = CharacterArchetype(
-            archetype=archetype,
-            age_presentation=age_presentation,
-            expression=expression,
+            self._extract_archetype(text_lower),
+            self._extract_age_presentation(text_lower),
+            self._extract_expression(text_lower),
         )
-
         appearance_changes = self._extract_appearance_changes(text_lower)
         wardrobe = self._extract_wardrobe(text_lower)
         environment = self._extract_environment(text_lower)
-        identity_preservation = IdentityPreservation()
-
-        confidence = self._calculate_confidence(
-            text_lower, character, appearance_changes, wardrobe, environment
-        )
-
         spec = CharacterSpecification(
-            character=character,
-            appearance_changes=appearance_changes,
-            wardrobe=wardrobe,
-            identity_preservation=identity_preservation,
-            environment=environment,
-            raw_input=natural_language,
-            confidence=confidence,
+            character,
+            appearance_changes,
+            wardrobe,
+            IdentityPreservation(),
+            environment,
+            natural_language,
+            self._calculate_confidence(
+                text_lower,
+                character,
+                appearance_changes,
+                wardrobe,
+                environment,
+            ),
         )
-
         self.specifications_generated += 1
-        logger.info(f"CharacterSpecification generated: archetype={archetype}, confidence={confidence:.2f}")
-
+        logger.info(
+            "CharacterSpecification generated: archetype=%s, confidence=%.2f",
+            character.archetype,
+            spec.confidence,
+        )
         return spec
 
     async def validate_specification(
@@ -215,143 +257,138 @@ class CharacterSpecificationEngine:
         spec: CharacterSpecification,
         identity_traits: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """Valida se a especificacao preserva adequadamente a identidade."""
         warnings = []
-
         if spec.appearance_changes.body:
             body_changes = spec.appearance_changes.body
             if "height" in str(body_changes).lower():
-                warnings.append("WARNING: Attempting to change height - permanent identity trait")
+                warnings.append(
+                    "WARNING: Attempting to change height - permanent identity trait"
+                )
             if "bone_structure" in str(body_changes).lower():
-                warnings.append("WARNING: Attempting to change bone structure - permanent identity trait")
-
+                warnings.append(
+                    "WARNING: Attempting to change bone structure - permanent identity trait"
+                )
         return {
             "valid": len([w for w in warnings if w.startswith("WARNING")]) == 0,
             "warnings": warnings,
-            "identity_preserved": spec.identity_preservation.face and spec.identity_preservation.body_proportions,
-            "recommendation": "Specification is valid" if not warnings else "Review warnings before generation",
+            "identity_preserved": (
+                spec.identity_preservation.face
+                and spec.identity_preservation.body_proportions
+            ),
+            "recommendation": (
+                "Specification is valid"
+                if not warnings
+                else "Review warnings before generation"
+            ),
         }
 
-    def _extract_archetype(self, text: str) -> str:
-        for keyword, archetype in self.ARCHETYPES.items():
+    def _extract_archetype(self, text):
+        for keyword, value in self.ARCHETYPES.items():
             if keyword in text:
-                return archetype
+                return value
         return "generic"
 
-    def _extract_expression(self, text: str) -> str:
-        for keyword, expression in self.EXPRESSIONS.items():
+    def _extract_expression(self, text):
+        for keyword, value in self.EXPRESSIONS.items():
             if keyword in text:
-                return expression
+                return value
         return "neutral"
 
-    def _extract_age_presentation(self, text: str) -> str:
-        age_patterns = [
+    def _extract_age_presentation(self, text):
+        patterns = [
             r"(\d+)\s*anos?",
             r"mais\s*(novo|nova|jovem|velho|velha)",
             r"mais\s*nov",
         ]
-        for pattern in age_patterns:
+        for pattern in patterns:
             match = re.search(pattern, text)
             if match:
                 if "nov" in match.group(0) or "jovem" in match.group(0):
                     return "younger"
-                elif "velh" in match.group(0):
+                if "velh" in match.group(0):
                     return "older"
-                else:
-                    return match.group(1)
+                return match.group(1)
         return "current"
 
-    def _extract_appearance_changes(self, text: str) -> AppearanceChanges:
+    def _extract_appearance_changes(self, text):
         changes = AppearanceChanges()
-
-        for keyword, beard_spec in self.BEARD_TYPES.items():
+        for keyword, spec in self.BEARD_TYPES.items():
             if keyword in text:
-                changes.beard = beard_spec
+                changes.beard = spec
                 break
 
-        hair_patterns = [
-            r"cabelo\s+(\w+)",
-            r"careca",
-            r"calvo",
-        ]
-        for pattern in hair_patterns:
+        for pattern in [r"cabelo\s+(\w+)", r"careca", r"calvo"]:
             match = re.search(pattern, text)
             if match:
                 if match.group(0) in ["careca", "calvo"]:
                     changes.hair = {"style": "bald", "length": "none"}
                 else:
-                    changes.hair = {"style": match.group(1), "length": match.group(1)}
+                    changes.hair = {
+                        "style": match.group(1),
+                        "length": match.group(1),
+                    }
                 break
-
         return changes
 
-    def _extract_wardrobe(self, text: str) -> Wardrobe:
-        wardrobe_type = "casual"
-        tone = None
-        accessories = []
-
-        for keyword, wtype in self.WARDROBE_TYPES.items():
+    def _extract_wardrobe(self, text):
+        wardrobe_type, tone, accessories = "casual", None, []
+        for keyword, value in self.WARDROBE_TYPES.items():
             if keyword in text:
-                wardrobe_type = wtype
+                wardrobe_type = value
                 break
-
-        for keyword, wtone in self.WARDROBE_TONES.items():
+        for keyword, value in self.WARDROBE_TONES.items():
             if keyword in text:
-                tone = wtone
+                tone = value
                 break
+        for accessory in [
+            "oculos",
+            "relogio",
+            "brinco",
+            "colar",
+            "gravata",
+            "bone",
+            "chapeu",
+        ]:
+            if accessory in text:
+                accessories.append(accessory)
+        return Wardrobe(type=wardrobe_type, tone=tone, accessories=accessories)
 
-        accessory_keywords = ["oculos", "relogio", "brinco", "colar", "gravata", "bone", "chapeu"]
-        for acc in accessory_keywords:
-            if acc in text:
-                accessories.append(acc)
-
-        return Wardrobe(
-            type=wardrobe_type,
-            tone=tone,
-            accessories=accessories,
-        )
-
-    def _extract_environment(self, text: str) -> EnvironmentContext:
+    def _extract_environment(self, text):
         settings = {
-            "escritorio": "office", "office": "office",
-            "rua": "street", "street": "street",
-            "estudio": "studio", "studio": "studio",
-            "natureza": "nature", "nature": "nature",
-            "casa": "home", "home": "home",
+            "escritorio": "office",
+            "office": "office",
+            "rua": "street",
+            "street": "street",
+            "estudio": "studio",
+            "studio": "studio",
+            "natureza": "nature",
+            "nature": "nature",
+            "casa": "home",
+            "home": "home",
         }
         lightings = {
-            "luz natural": "natural", "natural": "natural",
-            "luz de estudio": "studio", "studio": "studio",
-            "dramatica": "dramatic", "dramatic": "dramatic",
-            "suave": "soft", "soft": "soft",
+            "luz natural": "natural",
+            "natural": "natural",
+            "luz de estudio": "studio",
+            "studio": "studio",
+            "dramatica": "dramatic",
+            "dramatic": "dramatic",
+            "suave": "soft",
+            "soft": "soft",
         }
-
-        setting = None
-        lighting = None
-
-        for keyword, s in settings.items():
-            if keyword in text:
-                setting = s
-                break
-
-        for keyword, l in lightings.items():
-            if keyword in text:
-                lighting = l
-                break
-
+        setting = next((value for key, value in settings.items() if key in text), None)
+        lighting = next((value for key, value in lightings.items() if key in text), None)
         return EnvironmentContext(setting=setting, lighting=lighting)
 
     def _calculate_confidence(
         self,
-        text: str,
-        character: CharacterArchetype,
-        appearance: AppearanceChanges,
-        wardrobe: Wardrobe,
-        environment: EnvironmentContext,
-    ) -> float:
-        """Calcula confianca do parsing baseada na quantidade de elementos extraidos."""
+        text,
+        character,
+        appearance,
+        wardrobe,
+        environment,
+    ):
         score = 0.0
-
         if character.archetype != "generic":
             score += 0.3
         if character.expression != "neutral":
@@ -364,5 +401,4 @@ class CharacterSpecificationEngine:
             score += 0.1
         if environment.setting or environment.lighting:
             score += 0.1
-
         return min(1.0, score + 0.1)
