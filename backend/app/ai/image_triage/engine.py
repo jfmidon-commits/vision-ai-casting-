@@ -145,22 +145,14 @@ class ImageTriageEngine:
                 face_result, img_array, pose_result
             )
 
-            hairline_score = self._detect_hairline(img_array, pose_result, face_result)
-            if (
-                hairline_score >= 0.46
-                and category != TriageCategory.SMILING
-                and abs(scores.get("yaw", 0.0)) < 22
+            # Body framing is stronger evidence than hair/angle when hips are
+            # visible and knees are mostly outside the frame.
+            if category in (
+                TriageCategory.FRONTAL,
+                TriageCategory.FRONTAL_CLOSE,
+                TriageCategory.THREE_QUARTER_LEFT,
+                TriageCategory.THREE_QUARTER_RIGHT,
             ):
-                return TriageResult(
-                    filename=filename,
-                    category=TriageCategory.HAIRLINE,
-                    confidence=hairline_score,
-                    scores={"hairline_score": hairline_score, **scores},
-                    metadata={"face_detected": True, "hairline_visible": True},
-                    selected=True,
-                )
-
-            if category in (TriageCategory.FRONTAL, TriageCategory.FRONTAL_CLOSE):
                 half_body_score = self._detect_half_body(img_array, pose_result)
                 if self._is_half_body_pose(pose_result, half_body_score):
                     return TriageResult(
@@ -171,6 +163,21 @@ class ImageTriageEngine:
                         metadata={"pose_detected": True},
                         selected=True,
                     )
+
+            hairline_score = self._detect_hairline(img_array, pose_result, face_result)
+            if (
+                hairline_score >= 0.42
+                and category != TriageCategory.SMILING
+                and abs(scores.get("yaw", 0.0)) < 30
+            ):
+                return TriageResult(
+                    filename=filename,
+                    category=TriageCategory.HAIRLINE,
+                    confidence=hairline_score,
+                    scores={"hairline_score": hairline_score, **scores},
+                    metadata={"face_detected": True, "hairline_visible": True},
+                    selected=True,
+                )
 
             return TriageResult(
                 filename=filename,
@@ -199,7 +206,7 @@ class ImageTriageEngine:
             )
 
         hairline_score = self._detect_hairline(img_array, pose_result)
-        if hairline_score >= 0.50:
+        if hairline_score >= 0.42:
             return TriageResult(
                 filename=filename,
                 category=TriageCategory.HAIRLINE,
@@ -316,7 +323,7 @@ class ImageTriageEngine:
         score = 0.0
         h, w = img_array.shape[:2]
         aspect_ratio = h / w if w else 1.0
-        if 1.15 <= aspect_ratio <= 2.1:
+        if 1.1 <= aspect_ratio <= 2.2:
             score += 0.08
         if not pose_result.get("has_pose", False):
             return score
@@ -331,16 +338,16 @@ class ImageTriageEngine:
         shoulder_l = landmarks[11].get("visibility", 0.0)
         shoulder_r = landmarks[12].get("visibility", 0.0)
 
-        if max(hip_l, hip_r) > 0.35:
+        if max(hip_l, hip_r) > 0.30:
             score += 0.42
-        if (knee_l + knee_r) / 2 < 0.6:
+        if (knee_l + knee_r) / 2 < 0.68:
             score += 0.27
-        if max(shoulder_l, shoulder_r) > 0.5:
+        if max(shoulder_l, shoulder_r) > 0.45:
             score += 0.12
         return min(score, 1.0)
 
     def _is_half_body_pose(self, pose_result: Dict, score: float) -> bool:
-        if score < 0.62 or not pose_result.get("has_pose", False):
+        if score < 0.54 or not pose_result.get("has_pose", False):
             return False
         landmarks = pose_result.get("landmarks", [])
         if len(landmarks) < 27:
@@ -353,7 +360,7 @@ class ImageTriageEngine:
             landmarks[25].get("visibility", 0.0)
             + landmarks[26].get("visibility", 0.0)
         ) / 2
-        return hip_visibility > 0.35 and knee_visibility < 0.6
+        return hip_visibility > 0.30 and knee_visibility < 0.68
 
     def _detect_hairline(
         self,
@@ -371,12 +378,11 @@ class ImageTriageEngine:
                 face_height = chin_y - forehead_top
                 if face_height > 0:
                     forehead_ratio = (brow_y - forehead_top) / face_height
-                    if forehead_ratio >= 0.26:
+                    if forehead_ratio >= 0.25:
                         score += 0.52
-                    elif forehead_ratio >= 0.23:
+                    elif forehead_ratio >= 0.21:
                         score += 0.44
 
-                # A visible, clean forehead tends to have lower local edge density.
                 h, w = img_array.shape[:2]
                 y1 = max(0, int(forehead_top * h))
                 y2 = min(h, int(brow_y * h))
@@ -388,9 +394,8 @@ class ImageTriageEngine:
                     gray = cv2.cvtColor(region, cv2.COLOR_RGB2GRAY)
                     edges = cv2.Canny(gray, 50, 120)
                     edge_density = float(np.mean(edges > 0))
-                    if edge_density < 0.16:
+                    if edge_density < 0.18:
                         score += 0.12
-
         return min(score, 1.0)
 
     def _classify_face(
@@ -413,9 +418,9 @@ class ImageTriageEngine:
             if pitch < -10:
                 return TriageCategory.FRONTAL_CLOSE, 0.85, scores
             return TriageCategory.FRONTAL, 0.9, scores
-        if yaw >= 42:
+        if yaw >= 48:
             return TriageCategory.PROFILE_RIGHT, 0.78, scores
-        if yaw <= -42:
+        if yaw <= -48:
             return TriageCategory.PROFILE_LEFT, 0.78, scores
         if yaw > 0:
             return TriageCategory.THREE_QUARTER_RIGHT, 0.82, scores
@@ -434,7 +439,6 @@ class ImageTriageEngine:
             return 0.0
         ratio = (dist_right - dist_left) / total
 
-        # z-asymmetry makes the estimate less conservative for 3/4 captures.
         z_left = abs(nose["z"] - left_face["z"])
         z_right = abs(right_face["z"] - nose["z"])
         z_total = z_left + z_right
@@ -455,7 +459,6 @@ class ImageTriageEngine:
         return ((eye_level - nose["y"]) / face_height) * 45
 
     def _detect_smile(self, face_result: Dict) -> float:
-        # Backwards compatibility: older callers/tests pass a raw landmarks list.
         if isinstance(face_result, list):
             face_result = {"landmarks": face_result, "blendshapes": {}}
         elif not isinstance(face_result, dict):
