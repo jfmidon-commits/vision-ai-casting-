@@ -1,18 +1,14 @@
 """
 Configuração compartilhada para testes pytest.
+
+O pytest-asyncio moderno gerencia o event loop automaticamente. Manter um
+fixture ``event_loop`` próprio conflita com esse gerenciamento e pode deixar
+os testes seguintes sem loop corrente no Python 3.11+.
 """
 
-import pytest
-import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
-
-@pytest.fixture(scope="session")
-def event_loop():
-    """Cria um event loop para testes assíncronos."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
+import pytest
 
 
 @pytest.fixture
