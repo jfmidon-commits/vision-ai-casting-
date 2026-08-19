@@ -11,6 +11,7 @@ import {
   FileText,
   Settings,
   LogOut,
+  Scissors,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 
@@ -18,6 +19,7 @@ const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Perfis", href: "/profiles", icon: Users },
   { name: "Ensaios", href: "/photoshoots", icon: Camera },
+  { name: "Visagismo", href: "/visagism", icon: Scissors },
   { name: "Análises", href: "/analyses", icon: Brain },
   { name: "Relatórios", href: "/reports", icon: FileText },
   { name: "Configurações", href: "/settings", icon: Settings },
