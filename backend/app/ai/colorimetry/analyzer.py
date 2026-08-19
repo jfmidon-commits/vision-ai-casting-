@@ -18,7 +18,7 @@ class ColorimetryAnalyzer:
 
     def __init__(self):
         self._face_cascade = cv2.CascadeClassifier(
-            cv2.data.haarcascades + 'haarcascade_frontalface_alt2.xml'
+            cv2.data.haarcascades + "haarcascade_frontalface_alt2.xml"
         )
 
     def analyze(self, image_bytes: bytes) -> Dict[str, Any]:
@@ -95,7 +95,12 @@ class ColorimetryAnalyzer:
             "makeup_colors": makeup,
             "confidence": confidence,
             "face_detected": True,
-            "face_position": {"x": int(x), "y": int(y), "width": int(w), "height": int(h)},
+            "face_position": {
+                "x": int(x),
+                "y": int(y),
+                "width": int(w),
+                "height": int(h),
+            },
             "analysis_details": {
                 "skin_regions_extracted": len(skin_regions),
                 "color_clusters": len(dominant_colors),
@@ -111,27 +116,37 @@ class ColorimetryAnalyzer:
         regions = []
 
         # Regiao da testa (superior, evitando sobrancelhas)
-        forehead = img_rgb[y + int(h*0.05):y + int(h*0.25), x + int(w*0.2):x + int(w*0.8)]
+        forehead = img_rgb[
+            y + int(h * 0.05) : y + int(h * 0.25), x + int(w * 0.2) : x + int(w * 0.8)
+        ]
         if forehead.size > 0:
             regions.append(forehead)
 
         # Regiao das bochechas (laterais, evitando olhos)
-        left_cheek = img_rgb[y + int(h*0.35):y + int(h*0.65), x + int(w*0.05):x + int(w*0.35)]
+        left_cheek = img_rgb[
+            y + int(h * 0.35) : y + int(h * 0.65), x + int(w * 0.05) : x + int(w * 0.35)
+        ]
         if left_cheek.size > 0:
             regions.append(left_cheek)
 
-        right_cheek = img_rgb[y + int(h*0.35):y + int(h*0.65), x + int(w*0.65):x + int(w*0.95)]
+        right_cheek = img_rgb[
+            y + int(h * 0.35) : y + int(h * 0.65), x + int(w * 0.65) : x + int(w * 0.95)
+        ]
         if right_cheek.size > 0:
             regions.append(right_cheek)
 
         # Regiao do queixo (inferior, evitando boca)
-        chin = img_rgb[y + int(h*0.75):y + int(h*0.95), x + int(w*0.3):x + int(w*0.7)]
+        chin = img_rgb[
+            y + int(h * 0.75) : y + int(h * 0.95), x + int(w * 0.3) : x + int(w * 0.7)
+        ]
         if chin.size > 0:
             regions.append(chin)
 
         return regions
 
-    def _extract_dominant_colors(self, skin_regions: List[np.ndarray]) -> List[Dict[str, Any]]:
+    def _extract_dominant_colors(
+        self, skin_regions: List[np.ndarray]
+    ) -> List[Dict[str, Any]]:
         """
         Extrai cores dominantes das regioes de pele usando K-Means clustering.
         """
@@ -140,9 +155,12 @@ class ColorimetryAnalyzer:
 
         # Filtrar pixels muito escuros (sombra) ou muito claros (brilho)
         mask = (
-            (all_pixels[:, 0] > 40) & (all_pixels[:, 0] < 250) &
-            (all_pixels[:, 1] > 40) & (all_pixels[:, 1] < 250) &
-            (all_pixels[:, 2] > 40) & (all_pixels[:, 2] < 250)
+            (all_pixels[:, 0] > 40)
+            & (all_pixels[:, 0] < 250)
+            & (all_pixels[:, 1] > 40)
+            & (all_pixels[:, 1] < 250)
+            & (all_pixels[:, 2] > 40)
+            & (all_pixels[:, 2] < 250)
         )
         filtered_pixels = all_pixels[mask]
 
@@ -161,15 +179,17 @@ class ColorimetryAnalyzer:
             # Converter para HSV para analise
             hsv = cv2.cvtColor(np.uint8([[center]]), cv2.COLOR_RGB2HSV)[0][0]
 
-            colors.append({
-                "rgb": [r, g, b],
-                "hex": hex_color,
-                "hsv": {
-                    "h": int(hsv[0] * 2),  # OpenCV H: 0-179 -> 0-358
-                    "s": int(hsv[1] / 255 * 100),
-                    "v": int(hsv[2] / 255 * 100),
-                },
-            })
+            colors.append(
+                {
+                    "rgb": [r, g, b],
+                    "hex": hex_color,
+                    "hsv": {
+                        "h": int(hsv[0] * 2),  # OpenCV H: 0-179 -> 0-358
+                        "s": int(hsv[1] / 255 * 100),
+                        "v": int(hsv[2] / 255 * 100),
+                    },
+                }
+            )
 
         # Ordenar por valor (V) - do mais claro ao mais escuro
         colors.sort(key=lambda c: c["hsv"]["v"], reverse=True)
@@ -256,18 +276,15 @@ class ColorimetryAnalyzer:
             ("warm", "light", "bright"): ("Spring", "Bright Spring"),
             ("warm", "light", "medium"): ("Spring", "Warm Spring"),
             ("warm", "light", "soft"): ("Spring", "Light Spring"),
-
             # Verao (cool, light, soft/medium)
             ("cool", "light", "soft"): ("Summer", "Soft Summer"),
             ("cool", "light", "medium"): ("Summer", "Light Summer"),
             ("cool", "medium", "soft"): ("Summer", "Cool Summer"),
-
             # Outono (warm, medium/deep, soft/medium)
             ("warm", "medium", "soft"): ("Autumn", "Soft Autumn"),
             ("warm", "medium", "medium"): ("Autumn", "Warm Autumn"),
             ("warm", "deep", "medium"): ("Autumn", "Deep Autumn"),
             ("warm", "deep", "soft"): ("Autumn", "Deep Autumn"),
-
             # Inverno (cool, medium/deep, bright)
             ("cool", "medium", "bright"): ("Winter", "Cool Winter"),
             ("cool", "deep", "bright"): ("Winter", "Deep Winter"),
@@ -299,25 +316,61 @@ class ColorimetryAnalyzer:
         """
         palettes = {
             "Spring": {
-                "best_colors": ["#FFD700", "#FF8C00", "#32CD32", "#FF6347", "#F0E68C", "#FFA500", "#98FB98", "#FFDAB9"],
+                "best_colors": [
+                    "#FFD700",
+                    "#FF8C00",
+                    "#32CD32",
+                    "#FF6347",
+                    "#F0E68C",
+                    "#FFA500",
+                    "#98FB98",
+                    "#FFDAB9",
+                ],
                 "good_colors": ["#87CEEB", "#DDA0DD", "#F4A460", "#90EE90"],
                 "avoid_colors": ["#4B0082", "#000080", "#808080", "#2F4F4F", "#FF69B4"],
                 "neutrals": ["#F5F5DC", "#DEB887", "#D2B48C", "#FFF8DC"],
             },
             "Summer": {
-                "best_colors": ["#87CEEB", "#DDA0DD", "#98FB98", "#B0C4DE", "#D8BFD8", "#ADD8E6", "#E6E6FA", "#C0C0C0"],
+                "best_colors": [
+                    "#87CEEB",
+                    "#DDA0DD",
+                    "#98FB98",
+                    "#B0C4DE",
+                    "#D8BFD8",
+                    "#ADD8E6",
+                    "#E6E6FA",
+                    "#C0C0C0",
+                ],
                 "good_colors": ["#FFB6C1", "#20B2AA", "#778899", "#9370DB"],
                 "avoid_colors": ["#FF4500", "#8B4513", "#FFD700", "#FF8C00", "#FFA500"],
                 "neutrals": ["#E0E0E0", "#C0C0C0", "#D3D3D3", "#B0C4DE"],
             },
             "Autumn": {
-                "best_colors": ["#8B4513", "#D2691E", "#CD853F", "#A0522D", "#DEB887", "#556B2F", "#6B8E23", "#B8860B"],
+                "best_colors": [
+                    "#8B4513",
+                    "#D2691E",
+                    "#CD853F",
+                    "#A0522D",
+                    "#DEB887",
+                    "#556B2F",
+                    "#6B8E23",
+                    "#B8860B",
+                ],
                 "good_colors": ["#F4A460", "#BC8F8F", "#808000", "#A0522D"],
                 "avoid_colors": ["#FF69B4", "#00CED1", "#87CEEB", "#E6E6FA", "#DDA0DD"],
                 "neutrals": ["#F5F5DC", "#D2B48C", "#8B7355", "#C2B280"],
             },
             "Winter": {
-                "best_colors": ["#000080", "#4B0082", "#8B008B", "#DC143C", "#00CED1", "#191970", "#FF1493", "#00FA9A"],
+                "best_colors": [
+                    "#000080",
+                    "#4B0082",
+                    "#8B008B",
+                    "#DC143C",
+                    "#00CED1",
+                    "#191970",
+                    "#FF1493",
+                    "#00FA9A",
+                ],
                 "good_colors": ["#4169E1", "#9400D3", "#FF4500", "#00FF7F"],
                 "avoid_colors": ["#D2691E", "#CD853F", "#DEB887", "#F5F5DC", "#808000"],
                 "neutrals": ["#000000", "#2F4F4F", "#696969", "#A9A9A9"],
@@ -335,24 +388,56 @@ class ColorimetryAnalyzer:
         """
         recommendations = {
             "Spring": {
-                "formal": ["Tons quentes claros", "Bege dourado", "Creme", "Azul claro quente"],
+                "formal": [
+                    "Tons quentes claros",
+                    "Bege dourado",
+                    "Creme",
+                    "Azul claro quente",
+                ],
                 "casual": ["Coral", "Pessego", "Verde menta", "Amarelo claro"],
-                "camera": ["Evitar branco puro", "Preferir tons quentes neutros", "Iluminadores dourados"],
+                "camera": [
+                    "Evitar branco puro",
+                    "Preferir tons quentes neutros",
+                    "Iluminadores dourados",
+                ],
             },
             "Summer": {
                 "formal": ["Azul acinzentado", "Rosa antigo", "Lavanda", "Cinza claro"],
                 "casual": ["Rosa bebe", "Azul celeste", "Verde agua", "Lilas"],
-                "camera": ["Evitar laranja e dourado", "Preferir tons frios suaves", "Iluminadores perolados"],
+                "camera": [
+                    "Evitar laranja e dourado",
+                    "Preferir tons frios suaves",
+                    "Iluminadores perolados",
+                ],
             },
             "Autumn": {
-                "formal": ["Tons terrosos escuros", "Marrom chocolate", "Verde oliva", "Bordô"],
+                "formal": [
+                    "Tons terrosos escuros",
+                    "Marrom chocolate",
+                    "Verde oliva",
+                    "Bordô",
+                ],
                 "casual": ["Oliva", "Mostarda", "Caramelo", "Telha", "Cobre"],
-                "camera": ["Tons quentes neutros", "Evitar branco puro", "Iluminadores bronze"],
+                "camera": [
+                    "Tons quentes neutros",
+                    "Evitar branco puro",
+                    "Iluminadores bronze",
+                ],
             },
             "Winter": {
-                "formal": ["Preto", "Azul marinho", "Vinho", "Roxo profundo", "Branco puro"],
+                "formal": [
+                    "Preto",
+                    "Azul marinho",
+                    "Vinho",
+                    "Roxo profundo",
+                    "Branco puro",
+                ],
                 "casual": ["Fucsia", "Turquesa", "Verde esmeralda", "Vermelho vivo"],
-                "camera": ["Cores vivas e contrastantes", "Evitar tons terrosos", "Iluminadores prateados"],
+                "camera": [
+                    "Cores vivas e contrastantes",
+                    "Evitar tons terrosos",
+                    "Iluminadores prateados",
+                ],
             },
         }
 
@@ -383,14 +468,31 @@ class ColorimetryAnalyzer:
                 "foundation": "Bege medio quente ou avela",
                 "blush": "Pessego ou bronze",
                 "lipstick": ["Terra", "Caramelo", "Nude quente", "Bordô leve"],
-                "eyeshadow": ["Bronze", "Dourado suave", "Verde oliva", "Marrom quente"],
+                "eyeshadow": [
+                    "Bronze",
+                    "Dourado suave",
+                    "Verde oliva",
+                    "Marrom quente",
+                ],
                 "highlighter": "Bronze ou ouro rosado",
             },
             "Winter": {
                 "foundation": "Bege neutro ou rosado medio a profundo",
                 "blush": "Rosa fucsia ou ameixa",
-                "lipstick": ["Vermelho vivo", "Fucsia", "Bordô", "Ameixa", "Rosa choque"],
-                "eyeshadow": ["Prata", "Grafite", "Roxo profundo", "Azul marinho", "Preto esfumado"],
+                "lipstick": [
+                    "Vermelho vivo",
+                    "Fucsia",
+                    "Bordô",
+                    "Ameixa",
+                    "Rosa choque",
+                ],
+                "eyeshadow": [
+                    "Prata",
+                    "Grafite",
+                    "Roxo profundo",
+                    "Azul marinho",
+                    "Preto esfumado",
+                ],
                 "highlighter": "Prata ou diamante",
             },
         }

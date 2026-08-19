@@ -91,22 +91,26 @@ class MemoryService:
             expires_at = datetime.utcnow() + timedelta(days=ttl_days)
 
         # Upsert: atualiza se existe, cria se não
-        stmt = insert(UserMemory).values(
-            user_id=user_id,
-            memory_key=key,
-            category=category,
-            value=value,
-            expires_at=expires_at,
-            updated_at=datetime.utcnow(),
-        ).on_conflict_do_update(
-            index_elements=["user_id", "memory_key"],
-            set_={
-                "value": value,
-                "category": category,
-                "expires_at": expires_at,
-                "updated_at": datetime.utcnow(),
-                "access_count": UserMemory.access_count + 1,
-            }
+        stmt = (
+            insert(UserMemory)
+            .values(
+                user_id=user_id,
+                memory_key=key,
+                category=category,
+                value=value,
+                expires_at=expires_at,
+                updated_at=datetime.utcnow(),
+            )
+            .on_conflict_do_update(
+                index_elements=["user_id", "memory_key"],
+                set_={
+                    "value": value,
+                    "category": category,
+                    "expires_at": expires_at,
+                    "updated_at": datetime.utcnow(),
+                    "access_count": UserMemory.access_count + 1,
+                },
+            )
         )
 
         await db.execute(stmt)
@@ -161,8 +165,8 @@ class MemoryService:
                     UserMemory.memory_key == key,
                     or_(
                         UserMemory.expires_at.is_(None),
-                        UserMemory.expires_at > datetime.utcnow()
-                    )
+                        UserMemory.expires_at > datetime.utcnow(),
+                    ),
                 )
             )
         )
@@ -204,8 +208,8 @@ class MemoryService:
                 UserMemory.user_id == user_id,
                 or_(
                     UserMemory.expires_at.is_(None),
-                    UserMemory.expires_at > datetime.utcnow()
-                )
+                    UserMemory.expires_at > datetime.utcnow(),
+                ),
             )
         )
 
@@ -441,7 +445,7 @@ class MemoryService:
             select(UserMemory).where(
                 and_(
                     UserMemory.expires_at.isnot(None),
-                    UserMemory.expires_at < datetime.utcnow()
+                    UserMemory.expires_at < datetime.utcnow(),
                 )
             )
         )

@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SkinMetrics:
     """Metricas de analise da pele."""
+
     uniformity_score: float
     brightness_score: float
     texture_score: float
@@ -29,6 +30,7 @@ class SkinMetrics:
 @dataclass
 class BeardMetrics:
     """Metricas de analise de barba."""
+
     coverage_score: float
     uniformity_score: float
     length_estimate: str
@@ -40,6 +42,7 @@ class BeardMetrics:
 @dataclass
 class EyebrowMetrics:
     """Metricas de analise de sobrancelhas."""
+
     symmetry_score: float
     thickness_score: float
     arch_score: float
@@ -50,6 +53,7 @@ class EyebrowMetrics:
 @dataclass
 class HairMetrics:
     """Metricas de analise de cabelo."""
+
     coverage_score: float
     volume_score: float
     texture_score: float
@@ -65,23 +69,134 @@ class GroomingAnalyzer:
     """
 
     # MediaPipe FaceMesh landmark indices
-    FACE_OVAL = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288,
-                 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136,
-                 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109]
+    FACE_OVAL = [
+        10,
+        338,
+        297,
+        332,
+        284,
+        251,
+        389,
+        356,
+        454,
+        323,
+        361,
+        288,
+        397,
+        365,
+        379,
+        378,
+        400,
+        377,
+        152,
+        148,
+        176,
+        149,
+        150,
+        136,
+        172,
+        58,
+        132,
+        93,
+        234,
+        127,
+        162,
+        21,
+        54,
+        103,
+        67,
+        109,
+    ]
 
     LEFT_EYEBROW = [70, 63, 105, 66, 107, 55, 65, 52, 53, 46]
     RIGHT_EYEBROW = [336, 296, 334, 293, 300, 276, 283, 282, 295, 285]
 
-    LEFT_EYE = [33, 246, 161, 160, 159, 158, 157, 173, 133, 155, 154, 153, 145, 144, 163, 7]
-    RIGHT_EYE = [362, 398, 384, 385, 386, 387, 388, 466, 263, 249, 390, 373, 374, 380, 381, 382]
+    LEFT_EYE = [
+        33,
+        246,
+        161,
+        160,
+        159,
+        158,
+        157,
+        173,
+        133,
+        155,
+        154,
+        153,
+        145,
+        144,
+        163,
+        7,
+    ]
+    RIGHT_EYE = [
+        362,
+        398,
+        384,
+        385,
+        386,
+        387,
+        388,
+        466,
+        263,
+        249,
+        390,
+        373,
+        374,
+        380,
+        381,
+        382,
+    ]
 
     NOSE = [1, 2, 98, 327, 168, 195, 5, 4, 275, 440, 305]
-    MOUTH_OUTER = [61, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291, 375, 321, 405, 314, 17, 84, 181, 91, 146]
-    MOUTH_INNER = [78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95]
+    MOUTH_OUTER = [
+        61,
+        185,
+        40,
+        39,
+        37,
+        0,
+        267,
+        269,
+        270,
+        409,
+        291,
+        375,
+        321,
+        405,
+        314,
+        17,
+        84,
+        181,
+        91,
+        146,
+    ]
+    MOUTH_INNER = [
+        78,
+        191,
+        80,
+        81,
+        82,
+        13,
+        312,
+        311,
+        310,
+        415,
+        308,
+        324,
+        318,
+        402,
+        317,
+        14,
+        87,
+        178,
+        88,
+        95,
+    ]
 
     def __init__(self):
         self._face_cascade = cv2.CascadeClassifier(
-            cv2.data.haarcascades + 'haarcascade_frontalface_alt2.xml'
+            cv2.data.haarcascades + "haarcascade_frontalface_alt2.xml"
         )
 
         # MediaPipe FaceMesh
@@ -93,6 +208,7 @@ class GroomingAnalyzer:
         """Inicializa MediaPipe FaceMesh."""
         try:
             import mediapipe as mp
+
             self._mp_face_mesh = mp.solutions.face_mesh
             self._face_mesh = self._mp_face_mesh.FaceMesh(
                 static_image_mode=True,
@@ -133,8 +249,8 @@ class GroomingAnalyzer:
         largest_face = max(faces, key=lambda f: f[2] * f[3])
         x, y, w, h = largest_face
 
-        face_roi = gray[y:y+h, x:x+w]
-        face_roi_color = img[y:y+h, x:x+w]
+        face_roi = gray[y : y + h, x : x + w]
+        face_roi_color = img[y : y + h, x : x + w]
 
         # Tentar MediaPipe FaceMesh
         landmarks = self._get_mediapipe_landmarks(img)
@@ -142,7 +258,9 @@ class GroomingAnalyzer:
         # Analises individuais com landmarks precisos
         skin = self._analyze_skin(face_roi_color, face_roi, landmarks, x, y, w, h)
         beard = self._analyze_beard(face_roi_color, face_roi, landmarks, x, y, w, h)
-        eyebrows = self._analyze_eyebrows(face_roi_color, face_roi, landmarks, x, y, w, h)
+        eyebrows = self._analyze_eyebrows(
+            face_roi_color, face_roi, landmarks, x, y, w, h
+        )
         hair = self._analyze_hair(img, gray, landmarks, x, y, w, h)
         hygiene = self._analyze_hygiene_overall(skin, beard, eyebrows, hair)
 
@@ -163,8 +281,15 @@ class GroomingAnalyzer:
             "face_detected": True,
             "landmarks_detected": landmarks is not None,
             "landmark_count": len(landmarks) if landmarks else 0,
-            "face_position": {"x": int(x), "y": int(y), "width": int(w), "height": int(h)},
-            "recommendations": self._generate_recommendations(skin, beard, eyebrows, hair, hygiene),
+            "face_position": {
+                "x": int(x),
+                "y": int(y),
+                "width": int(w),
+                "height": int(h),
+            },
+            "recommendations": self._generate_recommendations(
+                skin, beard, eyebrows, hair, hygiene
+            ),
             "grooming_plan": self._generate_grooming_plan(skin, beard, eyebrows, hair),
         }
 
@@ -177,6 +302,7 @@ class GroomingAnalyzer:
 
         try:
             import mediapipe as mp
+
             img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             results = self._face_mesh.process(img_rgb)
 
@@ -188,13 +314,15 @@ class GroomingAnalyzer:
 
             landmarks = []
             for lm in face_landmarks.landmark:
-                landmarks.append({
-                    "x": lm.x,
-                    "y": lm.y,
-                    "z": lm.z,
-                    "px_x": int(lm.x * w),
-                    "px_y": int(lm.y * h),
-                })
+                landmarks.append(
+                    {
+                        "x": lm.x,
+                        "y": lm.y,
+                        "z": lm.z,
+                        "px_x": int(lm.x * w),
+                        "px_y": int(lm.y * h),
+                    }
+                )
 
             return landmarks
 
@@ -227,17 +355,21 @@ class GroomingAnalyzer:
 
         return mask
 
-    def _get_region_pixels(
-        self, img: np.ndarray, mask: np.ndarray
-    ) -> np.ndarray:
+    def _get_region_pixels(self, img: np.ndarray, mask: np.ndarray) -> np.ndarray:
         """Extrai pixels da imagem onde a mascara e ativa."""
         return img[mask > 0]
 
     # ========== SKIN ANALYSIS ==========
 
     def _analyze_skin(
-        self, face_color: np.ndarray, face_gray: np.ndarray,
-        landmarks: Optional[list], face_x: int, face_y: int, face_w: int, face_h: int
+        self,
+        face_color: np.ndarray,
+        face_gray: np.ndarray,
+        landmarks: Optional[list],
+        face_x: int,
+        face_y: int,
+        face_w: int,
+        face_h: int,
     ) -> SkinMetrics:
         """Analisa qualidade da pele usando landmarks para regioes precisas."""
         h, w = face_gray.shape
@@ -246,46 +378,109 @@ class GroomingAnalyzer:
         if landmarks:
             # Usar landmarks para definir regioes precisas
             # Testa: entre sobrancelhas e acima dos olhos
-            forehead_indices = [10, 8, 6, 5, 4, 1, 0, 37, 39, 40, 185, 61, 67, 103, 54, 21]
-            forehead_mask = self._get_region_mask(face_color, landmarks, forehead_indices)
+            forehead_indices = [
+                10,
+                8,
+                6,
+                5,
+                4,
+                1,
+                0,
+                37,
+                39,
+                40,
+                185,
+                61,
+                67,
+                103,
+                54,
+                21,
+            ]
+            forehead_mask = self._get_region_mask(
+                face_color, landmarks, forehead_indices
+            )
             forehead_pixels = self._get_region_pixels(face_color, forehead_mask)
 
             # Bochechas: laterais do nariz
-            left_cheek_indices = [117, 118, 119, 120, 121, 128, 114, 47, 126, 217, 174, 196, 3, 51, 45, 44]
-            right_cheek_indices = [346, 347, 348, 349, 350, 357, 343, 277, 356, 437, 399, 419, 248, 261, 265, 264]
+            left_cheek_indices = [
+                117,
+                118,
+                119,
+                120,
+                121,
+                128,
+                114,
+                47,
+                126,
+                217,
+                174,
+                196,
+                3,
+                51,
+                45,
+                44,
+            ]
+            right_cheek_indices = [
+                346,
+                347,
+                348,
+                349,
+                350,
+                357,
+                343,
+                277,
+                356,
+                437,
+                399,
+                419,
+                248,
+                261,
+                265,
+                264,
+            ]
 
             left_mask = self._get_region_mask(face_color, landmarks, left_cheek_indices)
-            right_mask = self._get_region_mask(face_color, landmarks, right_cheek_indices)
+            right_mask = self._get_region_mask(
+                face_color, landmarks, right_cheek_indices
+            )
 
             left_pixels = self._get_region_pixels(face_color, left_mask)
             right_pixels = self._get_region_pixels(face_color, right_mask)
 
             # Combinar todas as regioes de pele
-            all_skin_pixels = np.vstack([
-                p for p in [forehead_pixels, left_pixels, right_pixels]
-                if len(p) > 0
-            ]) if any(len(p) > 0 for p in [forehead_pixels, left_pixels, right_pixels]) else None
+            all_skin_pixels = (
+                np.vstack(
+                    [
+                        p
+                        for p in [forehead_pixels, left_pixels, right_pixels]
+                        if len(p) > 0
+                    ]
+                )
+                if any(len(p) > 0 for p in [forehead_pixels, left_pixels, right_pixels])
+                else None
+            )
         else:
             all_skin_pixels = None
 
         # Se nao conseguiu landmarks, usar regioes aproximadas
         if all_skin_pixels is None or len(all_skin_pixels) < 100:
             # Regiao da testa (superior 30%)
-            forehead_gray = face_gray[:int(h*0.3), int(w*0.2):int(w*0.8)]
+            forehead_gray = face_gray[: int(h * 0.3), int(w * 0.2) : int(w * 0.8)]
             # Bochechas (meio lateral)
-            left_cheek_gray = face_gray[int(h*0.3):int(h*0.7), :int(w*0.4)]
-            right_cheek_gray = face_gray[int(h*0.3):int(h*0.7), int(w*0.6):]
+            left_cheek_gray = face_gray[int(h * 0.3) : int(h * 0.7), : int(w * 0.4)]
+            right_cheek_gray = face_gray[int(h * 0.3) : int(h * 0.7), int(w * 0.6) :]
 
-            face_gray_for_analysis = np.concatenate([
-                forehead_gray.flatten(),
-                left_cheek_gray.flatten(),
-                right_cheek_gray.flatten()
-            ])
+            face_gray_for_analysis = np.concatenate(
+                [
+                    forehead_gray.flatten(),
+                    left_cheek_gray.flatten(),
+                    right_cheek_gray.flatten(),
+                ]
+            )
         else:
             # Converter pixels para grayscale para analise
             face_gray_for_analysis = cv2.cvtColor(
-                all_skin_pixels.reshape(-1, 1, 3).astype(np.uint8),
-                cv2.COLOR_RGB2GRAY
+                all_skin_pixels.reshape(-1, 1, 3).astype(np.uint8), cv2.COLOR_RGB2GRAY
             ).flatten()
 
             # Usar pixels coloridos para analise de vermelhidao
@@ -305,7 +500,7 @@ class GroomingAnalyzer:
 
         # Textura
         if len(face_gray_for_analysis) > 100:
-            sample = face_gray_for_analysis[:min(10000, len(face_gray_for_analysis))]
+            sample = face_gray_for_analysis[: min(10000, len(face_gray_for_analysis))]
             sample_2d = sample.reshape(int(np.sqrt(len(sample))), -1)
             laplacian = cv2.Laplacian(sample_2d.astype(np.uint8), cv2.CV_64F)
             texture_var = laplacian.var()
@@ -332,19 +527,23 @@ class GroomingAnalyzer:
         redness_score = max(0, 1.0 - abs(redness_ratio - 1.0) * 2)
 
         # Poros
-        local_var = np.array([
-            np.std(face_gray_for_analysis[i:i+100])
-            for i in range(0, max(1, len(face_gray_for_analysis)-100), 100)
-        ])
-        pore_visibility = min(1.0, np.mean(local_var) / 30) if len(local_var) > 0 else 0.5
+        local_var = np.array(
+            [
+                np.std(face_gray_for_analysis[i : i + 100])
+                for i in range(0, max(1, len(face_gray_for_analysis) - 100), 100)
+            ]
+        )
+        pore_visibility = (
+            min(1.0, np.mean(local_var) / 30) if len(local_var) > 0 else 0.5
+        )
         pore_score = max(0, 1.0 - pore_visibility)
 
         overall = (
-            uniformity * 0.25 +
-            brightness_score * 0.25 +
-            texture_score * 0.20 +
-            redness_score * 0.15 +
-            pore_score * 0.15
+            uniformity * 0.25
+            + brightness_score * 0.25
+            + texture_score * 0.20
+            + redness_score * 0.15
+            + pore_score * 0.15
         )
 
         return SkinMetrics(
@@ -359,8 +558,14 @@ class GroomingAnalyzer:
     # ========== BEARD ANALYSIS ==========
 
     def _analyze_beard(
-        self, face_color: np.ndarray, face_gray: np.ndarray,
-        landmarks: Optional[list], face_x: int, face_y: int, face_w: int, face_h: int
+        self,
+        face_color: np.ndarray,
+        face_gray: np.ndarray,
+        landmarks: Optional[list],
+        face_x: int,
+        face_y: int,
+        face_w: int,
+        face_h: int,
     ) -> BeardMetrics:
         """Analisa barba na regiao inferior do rosto."""
         h, w = face_gray.shape
@@ -368,38 +573,77 @@ class GroomingAnalyzer:
         if landmarks:
             # Usar landmarks para definir regiao exata da barba
             # Mandibula inferior + queixo
-            beard_indices = [152, 148, 176, 149, 150, 136, 172, 58, 132, 93,
-                           234, 127, 162, 21, 54, 103, 67, 109, 10, 338, 297,
-                           332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365]
+            beard_indices = [
+                152,
+                148,
+                176,
+                149,
+                150,
+                136,
+                172,
+                58,
+                132,
+                93,
+                234,
+                127,
+                162,
+                21,
+                54,
+                103,
+                67,
+                109,
+                10,
+                338,
+                297,
+                332,
+                284,
+                251,
+                389,
+                356,
+                454,
+                323,
+                361,
+                288,
+                397,
+                365,
+            ]
             beard_mask = self._get_region_mask(face_color, landmarks, beard_indices)
 
             # Limitar a metade inferior
-            beard_mask[:h//2, :] = 0
+            beard_mask[: h // 2, :] = 0
 
             beard_pixels_gray = self._get_region_pixels(face_gray, beard_mask)
             beard_pixels_color = self._get_region_pixels(face_color, beard_mask)
 
             if len(beard_pixels_gray) > 0:
-                beard_region = beard_pixels_gray.reshape(int(np.sqrt(len(beard_pixels_gray))), -1)
+                beard_region = beard_pixels_gray.reshape(
+                    int(np.sqrt(len(beard_pixels_gray))), -1
+                )
                 beard_color_region = beard_pixels_color
             else:
-                beard_region = face_gray[int(h*0.55):, :]
-                beard_color_region = face_color[int(h*0.55):, :]
+                beard_region = face_gray[int(h * 0.55) :, :]
+                beard_color_region = face_color[int(h * 0.55) :, :]
         else:
-            beard_region = face_gray[int(h*0.55):, :]
-            beard_color_region = face_color[int(h*0.55):, :]
+            beard_region = face_gray[int(h * 0.55) :, :]
+            beard_color_region = face_color[int(h * 0.55) :, :]
 
         if beard_region.size == 0:
             return BeardMetrics(0, 0, "none", 0, 0, 0)
 
         # Detectar cobertura
-        beard_laplacian = cv2.Laplacian(
-            beard_region.reshape(int(np.sqrt(max(1, beard_region.size))), -1).astype(np.uint8),
-            cv2.CV_64F
-        ) if beard_region.ndim == 1 else cv2.Laplacian(beard_region, cv2.CV_64F)
+        beard_laplacian = (
+            cv2.Laplacian(
+                beard_region.reshape(
+                    int(np.sqrt(max(1, beard_region.size))), -1
+                ).astype(np.uint8),
+                cv2.CV_64F,
+            )
+            if beard_region.ndim == 1
+            else cv2.Laplacian(beard_region, cv2.CV_64F)
+        )
 
         beard_texture = beard_laplacian.var() if beard_laplacian.size > 0 else 0
-        upper_face = face_gray[:int(h*0.55), :]
+        upper_face = face_gray[: int(h * 0.55), :]
         upper_laplacian = cv2.Laplacian(upper_face, cv2.CV_64F)
         upper_texture = upper_laplacian.var()
 
@@ -407,7 +651,9 @@ class GroomingAnalyzer:
         coverage = min(1.0, max(0, (texture_ratio - 0.5) * 0.8))
 
         # Uniformidade
-        beard_std = np.std(beard_region) if beard_region.ndim > 1 else np.std(beard_region)
+        beard_std = (
+            np.std(beard_region) if beard_region.ndim > 1 else np.std(beard_region)
+        )
         uniformity = max(0, 1.0 - beard_std / 60)
 
         # Comprimento
@@ -432,7 +678,9 @@ class GroomingAnalyzer:
 
         # Aparência
         neatness = uniformity * 0.6 + edge_definition * 0.4
-        overall = coverage * 0.3 + uniformity * 0.25 + neatness * 0.25 + edge_definition * 0.2
+        overall = (
+            coverage * 0.3 + uniformity * 0.25 + neatness * 0.25 + edge_definition * 0.2
+        )
 
         return BeardMetrics(
             coverage_score=round(coverage, 3),
@@ -446,8 +694,14 @@ class GroomingAnalyzer:
     # ========== EYEBROW ANALYSIS ==========
 
     def _analyze_eyebrows(
-        self, face_color: np.ndarray, face_gray: np.ndarray,
-        landmarks: Optional[list], face_x: int, face_y: int, face_w: int, face_h: int
+        self,
+        face_color: np.ndarray,
+        face_gray: np.ndarray,
+        landmarks: Optional[list],
+        face_x: int,
+        face_y: int,
+        face_w: int,
+        face_h: int,
     ) -> EyebrowMetrics:
         """Analisa sobrancelhas usando landmarks MediaPipe."""
         h, w = face_gray.shape
@@ -467,9 +721,13 @@ class GroomingAnalyzer:
                 right_mask = np.zeros(face_gray.shape, dtype=np.uint8)
 
                 if len(left_brow_pts) >= 3:
-                    cv2.fillPoly(left_mask, [np.array(left_brow_pts, dtype=np.int32)], 255)
+                    cv2.fillPoly(
+                        left_mask, [np.array(left_brow_pts, dtype=np.int32)], 255
+                    )
                 if len(right_brow_pts) >= 3:
-                    cv2.fillPoly(right_mask, [np.array(right_brow_pts, dtype=np.int32)], 255)
+                    cv2.fillPoly(
+                        right_mask, [np.array(right_brow_pts, dtype=np.int32)], 255
+                    )
 
                 left_pixels = face_gray[left_mask > 0]
                 right_pixels = face_gray[right_mask > 0]
@@ -478,13 +736,23 @@ class GroomingAnalyzer:
                 left_y_coords = [p[1] for p in left_brow_pts]
                 right_y_coords = [p[1] for p in right_brow_pts]
 
-                left_height = max(left_y_coords) - min(left_y_coords) if left_y_coords else 0
-                right_height = max(right_y_coords) - min(right_y_coords) if right_y_coords else 0
-                symmetry = 1.0 - abs(left_height - right_height) / max(left_height + right_height, 1)
+                left_height = (
+                    max(left_y_coords) - min(left_y_coords) if left_y_coords else 0
+                )
+                right_height = (
+                    max(right_y_coords) - min(right_y_coords) if right_y_coords else 0
+                )
+                symmetry = 1.0 - abs(left_height - right_height) / max(
+                    left_height + right_height, 1
+                )
 
                 # Espessura: densidade de pixels escuros
-                left_darkness = 1.0 - np.mean(left_pixels) / 255.0 if len(left_pixels) > 0 else 0
-                right_darkness = 1.0 - np.mean(right_pixels) / 255.0 if len(right_pixels) > 0 else 0
+                left_darkness = (
+                    1.0 - np.mean(left_pixels) / 255.0 if len(left_pixels) > 0 else 0
+                )
+                right_darkness = (
+                    1.0 - np.mean(right_pixels) / 255.0 if len(right_pixels) > 0 else 0
+                )
                 thickness = min(1.0, (left_darkness + right_darkness) / 2 * 2)
 
                 # Arco: analise de curvatura
@@ -500,15 +768,26 @@ class GroomingAnalyzer:
 
                 # Definicao: contraste entre sobrancelha e pele ao redor
                 left_mean = np.mean(left_pixels) if len(left_pixels) > 0 else 128
-                surrounding_left = face_gray[max(0, min(left_y_coords)-5):min(h, max(left_y_coords)+5),
-                                            max(0, min(left_x)-10):min(w, max(left_x)+10)] if left_y_coords and left_x else face_gray
+                surrounding_left = (
+                    face_gray[
+                        max(0, min(left_y_coords) - 5) : min(h, max(left_y_coords) + 5),
+                        max(0, min(left_x) - 10) : min(w, max(left_x) + 10),
+                    ]
+                    if left_y_coords and left_x
+                    else face_gray
+                )
                 if surrounding_left.size > 0:
                     surround_mean = np.mean(surrounding_left)
                     definition = min(1.0, abs(left_mean - surround_mean) / 128)
                 else:
                     definition = 0.5
 
-                overall = symmetry * 0.3 + thickness * 0.2 + arch_strength * 0.2 + definition * 0.3
+                overall = (
+                    symmetry * 0.3
+                    + thickness * 0.2
+                    + arch_strength * 0.2
+                    + definition * 0.3
+                )
 
                 return EyebrowMetrics(
                     symmetry_score=round(symmetry, 3),
@@ -519,7 +798,7 @@ class GroomingAnalyzer:
                 )
 
         # Fallback: regiao aproximada
-        eyebrow_region = face_gray[int(h*0.20):int(h*0.45), :]
+        eyebrow_region = face_gray[int(h * 0.20) : int(h * 0.45), :]
         if eyebrow_region.size == 0:
             return EyebrowMetrics(0.5, 0.5, 0.5, 0.5, 0.5)
 
@@ -537,10 +816,14 @@ class GroomingAnalyzer:
         grad_y = cv2.Sobel(eyebrow_region, cv2.CV_64F, 0, 1, ksize=3)
         arch_strength = min(1.0, np.mean(np.abs(grad_y)) / 20)
 
-        _, thresh = cv2.threshold(eyebrow_region, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+        _, thresh = cv2.threshold(
+            eyebrow_region, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
+        )
         definition = np.sum(thresh > 0) / thresh.size
 
-        overall = symmetry * 0.3 + thickness * 0.2 + arch_strength * 0.2 + definition * 0.3
+        overall = (
+            symmetry * 0.3 + thickness * 0.2 + arch_strength * 0.2 + definition * 0.3
+        )
 
         return EyebrowMetrics(
             symmetry_score=round(symmetry, 3),
@@ -562,10 +845,10 @@ class GroomingAnalyzer:
         # Segunda derivada aproximada
         curvature = 0
         for i in range(1, len(x_norm) - 1):
-            dx1 = x_norm[i] - x_norm[i-1]
-            dx2 = x_norm[i+1] - x_norm[i]
-            dy1 = y_norm[i] - y_norm[i-1]
-            dy2 = y_norm[i+1] - y_norm[i]
+            dx1 = x_norm[i] - x_norm[i - 1]
+            dx2 = x_norm[i + 1] - x_norm[i]
+            dy1 = y_norm[i] - y_norm[i - 1]
+            dy2 = y_norm[i + 1] - y_norm[i]
 
             d2y = dy2 - dy1
             curvature += abs(d2y)
@@ -575,8 +858,14 @@ class GroomingAnalyzer:
     # ========== HAIR ANALYSIS ==========
 
     def _analyze_hair(
-        self, img: np.ndarray, gray: np.ndarray,
-        landmarks: Optional[list], face_x: int, face_y: int, face_w: int, face_h: int
+        self,
+        img: np.ndarray,
+        gray: np.ndarray,
+        landmarks: Optional[list],
+        face_x: int,
+        face_y: int,
+        face_w: int,
+        face_h: int,
     ) -> HairMetrics:
         """Analisa cabelo na regiao acima do rosto."""
         img_h, img_w = img.shape[:2]
@@ -584,8 +873,27 @@ class GroomingAnalyzer:
         if landmarks:
             # Usar landmarks para definir regiao do cabelo
             # Topo da cabeca (landmarks superiores)
-            hair_top_indices = [10, 8, 6, 5, 4, 1, 0, 37, 39, 40, 185, 61, 67, 103, 54, 21]
-            hair_top_pts = self._get_landmark_region_pixels(landmarks, hair_top_indices, img.shape)
+            hair_top_indices = [
+                10,
+                8,
+                6,
+                5,
+                4,
+                1,
+                0,
+                37,
+                39,
+                40,
+                185,
+                61,
+                67,
+                103,
+                54,
+                21,
+            ]
+            hair_top_pts = self._get_landmark_region_pixels(
+                landmarks, hair_top_indices, img.shape
+            )
 
             if hair_top_pts:
                 min_y = min(p[1] for p in hair_top_pts)
@@ -633,7 +941,13 @@ class GroomingAnalyzer:
             shine = 0.5
 
         neatness = coverage * 0.3 + volume * 0.2 + texture * 0.2 + shine * 0.3
-        overall = coverage * 0.25 + volume * 0.20 + texture * 0.20 + shine * 0.20 + neatness * 0.15
+        overall = (
+            coverage * 0.25
+            + volume * 0.20
+            + texture * 0.20
+            + shine * 0.20
+            + neatness * 0.15
+        )
 
         return HairMetrics(
             coverage_score=round(coverage, 3),
@@ -647,8 +961,11 @@ class GroomingAnalyzer:
     # ========== HYGIENE OVERALL ==========
 
     def _analyze_hygiene_overall(
-        self, skin: SkinMetrics, beard: BeardMetrics,
-        eyebrows: EyebrowMetrics, hair: HairMetrics
+        self,
+        skin: SkinMetrics,
+        beard: BeardMetrics,
+        eyebrows: EyebrowMetrics,
+        hair: HairMetrics,
     ) -> Dict[str, Any]:
         scores = [
             skin.overall_score,
@@ -678,8 +995,11 @@ class GroomingAnalyzer:
         }
 
     def _positive_aspects(
-        self, skin: SkinMetrics, beard: BeardMetrics,
-        eyebrows: EyebrowMetrics, hair: HairMetrics
+        self,
+        skin: SkinMetrics,
+        beard: BeardMetrics,
+        eyebrows: EyebrowMetrics,
+        hair: HairMetrics,
     ) -> List[str]:
         positives = []
         if skin.uniformity_score > 0.7:
@@ -699,8 +1019,11 @@ class GroomingAnalyzer:
     # ========== SCORING & LEVELS ==========
 
     def _calculate_overall_score(
-        self, skin: SkinMetrics, beard: BeardMetrics,
-        eyebrows: EyebrowMetrics, hair: HairMetrics
+        self,
+        skin: SkinMetrics,
+        beard: BeardMetrics,
+        eyebrows: EyebrowMetrics,
+        hair: HairMetrics,
     ) -> float:
         weights = {"skin": 0.35, "beard": 0.20, "eyebrows": 0.20, "hair": 0.25}
 
@@ -711,18 +1034,26 @@ class GroomingAnalyzer:
             weights["hair"] = 0.30
 
         score = (
-            skin.overall_score * weights["skin"] +
-            beard.overall_score * weights["beard"] +
-            eyebrows.overall_score * weights["eyebrows"] +
-            hair.overall_score * weights["hair"]
+            skin.overall_score * weights["skin"]
+            + beard.overall_score * weights["beard"]
+            + eyebrows.overall_score * weights["eyebrows"]
+            + hair.overall_score * weights["hair"]
         )
         return min(1.0, max(0.0, score))
 
     def _calculate_confidence(
-        self, skin: SkinMetrics, beard: BeardMetrics,
-        eyebrows: EyebrowMetrics, hair: HairMetrics
+        self,
+        skin: SkinMetrics,
+        beard: BeardMetrics,
+        eyebrows: EyebrowMetrics,
+        hair: HairMetrics,
     ) -> str:
-        scores = [skin.overall_score, beard.overall_score, eyebrows.overall_score, hair.overall_score]
+        scores = [
+            skin.overall_score,
+            beard.overall_score,
+            eyebrows.overall_score,
+            hair.overall_score,
+        ]
         avg = np.mean(scores)
         if avg > 0.6:
             return "high"
@@ -746,98 +1077,145 @@ class GroomingAnalyzer:
     # ========== RECOMMENDATIONS ==========
 
     def _generate_recommendations(
-        self, skin: SkinMetrics, beard: BeardMetrics,
-        eyebrows: EyebrowMetrics, hair: HairMetrics, hygiene: Dict
+        self,
+        skin: SkinMetrics,
+        beard: BeardMetrics,
+        eyebrows: EyebrowMetrics,
+        hair: HairMetrics,
+        hygiene: Dict,
     ) -> List[Dict[str, Any]]:
         recs = []
 
         if skin.uniformity_score < 0.5:
-            recs.append({
-                "category": "skin",
-                "message": "Considerar uso de base ou corretivo para uniformizar o tom da pele",
-                "priority": "high",
-                "products": ["Base leve", "Corretivo", "Po translucido"],
-            })
+            recs.append(
+                {
+                    "category": "skin",
+                    "message": "Considerar uso de base ou corretivo para uniformizar o tom da pele",
+                    "priority": "high",
+                    "products": ["Base leve", "Corretivo", "Po translucido"],
+                }
+            )
 
         if skin.brightness_score < 0.4:
-            recs.append({
-                "category": "skin",
-                "message": "Pele opaca. Hidratacao e iluminador podem ajudar",
-                "priority": "medium",
-                "products": ["Hidratante facial", "Iluminador liquido", "Vitamina C"],
-            })
+            recs.append(
+                {
+                    "category": "skin",
+                    "message": "Pele opaca. Hidratacao e iluminador podem ajudar",
+                    "priority": "medium",
+                    "products": [
+                        "Hidratante facial",
+                        "Iluminador liquido",
+                        "Vitamina C",
+                    ],
+                }
+            )
 
         if skin.redness_score < 0.4:
-            recs.append({
-                "category": "skin",
-                "message": "Vermelhidao detectada. Usar produtos calmantes",
-                "priority": "medium",
-                "products": ["Creme com niacinamida", "Protetor solar", "Agua termal"],
-            })
+            recs.append(
+                {
+                    "category": "skin",
+                    "message": "Vermelhidao detectada. Usar produtos calmantes",
+                    "priority": "medium",
+                    "products": [
+                        "Creme com niacinamida",
+                        "Protetor solar",
+                        "Agua termal",
+                    ],
+                }
+            )
 
         if beard.coverage_score > 0.2 and beard.neatness_score < 0.5:
-            recs.append({
-                "category": "beard",
-                "message": f"Barba {beard.length_estimate} precisa de aparo. Definir linhas de bochecha e pescoço",
-                "priority": "high",
-                "products": ["Aparador de barba", "Tesoura de precisao", "Oleo de barba"],
-                "frequency": "A cada 2-3 dias",
-            })
+            recs.append(
+                {
+                    "category": "beard",
+                    "message": f"Barba {beard.length_estimate} precisa de aparo. Definir linhas de bochecha e pescoço",
+                    "priority": "high",
+                    "products": [
+                        "Aparador de barba",
+                        "Tesoura de precisao",
+                        "Oleo de barba",
+                    ],
+                    "frequency": "A cada 2-3 dias",
+                }
+            )
         elif beard.coverage_score > 0.2 and beard.neatness_score > 0.7:
-            recs.append({
-                "category": "beard",
-                "message": f"Barba {beard.length_estimate} bem cuidada. Manter rotina atual",
-                "priority": "low",
-                "products": ["Balsamo de barba", "Oleo de barba"],
-                "frequency": "Diaria",
-            })
+            recs.append(
+                {
+                    "category": "beard",
+                    "message": f"Barba {beard.length_estimate} bem cuidada. Manter rotina atual",
+                    "priority": "low",
+                    "products": ["Balsamo de barba", "Oleo de barba"],
+                    "frequency": "Diaria",
+                }
+            )
 
         if eyebrows.symmetry_score < 0.5:
-            recs.append({
-                "category": "eyebrows",
-                "message": "Sobrancelhas assimetricas. Considerar design profissional",
-                "priority": "medium",
-                "products": ["Lapis de sobrancelha", "Gel fixador", "Pinca"],
-                "frequency": "A cada 15-20 dias",
-            })
+            recs.append(
+                {
+                    "category": "eyebrows",
+                    "message": "Sobrancelhas assimetricas. Considerar design profissional",
+                    "priority": "medium",
+                    "products": ["Lapis de sobrancelha", "Gel fixador", "Pinca"],
+                    "frequency": "A cada 15-20 dias",
+                }
+            )
 
         if eyebrows.definition_score < 0.4:
-            recs.append({
-                "category": "eyebrows",
-                "message": "Sobrancelhas pouco definidas. Preenchimento sutil recomendado",
-                "priority": "low",
-                "products": ["Sombra para sobrancelhas", "Lapis marrom", "Mascara de sobrancelhas"],
-            })
+            recs.append(
+                {
+                    "category": "eyebrows",
+                    "message": "Sobrancelhas pouco definidas. Preenchimento sutil recomendado",
+                    "priority": "low",
+                    "products": [
+                        "Sombra para sobrancelhas",
+                        "Lapis marrom",
+                        "Mascara de sobrancelhas",
+                    ],
+                }
+            )
 
         if hair.neatness_score < 0.4:
-            recs.append({
-                "category": "hair",
-                "message": "Cabelo precisa de corte ou finalizacao. Verificar pontas duplas",
-                "priority": "high",
-                "products": ["Creme de pentear", "Oleo capilar", "Protetor termico"],
-                "frequency": "Corte a cada 4-6 semanas",
-            })
+            recs.append(
+                {
+                    "category": "hair",
+                    "message": "Cabelo precisa de corte ou finalizacao. Verificar pontas duplas",
+                    "priority": "high",
+                    "products": [
+                        "Creme de pentear",
+                        "Oleo capilar",
+                        "Protetor termico",
+                    ],
+                    "frequency": "Corte a cada 4-6 semanas",
+                }
+            )
 
         if hair.shine_score < 0.3:
-            recs.append({
-                "category": "hair",
-                "message": "Cabelo sem brilho. Tratamento de hidratacao recomendado",
-                "priority": "medium",
-                "products": ["Mascara de hidratacao", "Oleo de argan", "Leave-in"],
-            })
+            recs.append(
+                {
+                    "category": "hair",
+                    "message": "Cabelo sem brilho. Tratamento de hidratacao recomendado",
+                    "priority": "medium",
+                    "products": ["Mascara de hidratacao", "Oleo de argan", "Leave-in"],
+                }
+            )
 
         if not recs:
-            recs.append({
-                "category": "general",
-                "message": "Grooming excelente! Manter rotina atual de cuidados",
-                "priority": "low",
-            })
+            recs.append(
+                {
+                    "category": "general",
+                    "message": "Grooming excelente! Manter rotina atual de cuidados",
+                    "priority": "low",
+                }
+            )
 
         return recs
 
     def _generate_grooming_plan(
-        self, skin: SkinMetrics, beard: BeardMetrics,
-        eyebrows: EyebrowMetrics, hair: HairMetrics
+        self,
+        skin: SkinMetrics,
+        beard: BeardMetrics,
+        eyebrows: EyebrowMetrics,
+        hair: HairMetrics,
     ) -> List[str]:
         plan = []
         plan.append("Limpeza facial diaria (manha e noite)")
@@ -872,7 +1250,11 @@ class GroomingAnalyzer:
             "texture": skin.texture_score,
             "redness": skin.redness_score,
             "pore_visibility": skin.pore_visibility,
-            "level": "high" if skin.overall_score > 0.7 else "medium" if skin.overall_score > 0.45 else "low",
+            "level": (
+                "high"
+                if skin.overall_score > 0.7
+                else "medium" if skin.overall_score > 0.45 else "low"
+            ),
         }
 
     def _beard_to_dict(self, beard: BeardMetrics) -> Dict:
@@ -883,7 +1265,11 @@ class GroomingAnalyzer:
             "length_estimate": beard.length_estimate,
             "neatness": beard.neatness_score,
             "edge_definition": beard.edge_definition,
-            "level": "high" if beard.overall_score > 0.7 else "medium" if beard.overall_score > 0.45 else "low",
+            "level": (
+                "high"
+                if beard.overall_score > 0.7
+                else "medium" if beard.overall_score > 0.45 else "low"
+            ),
         }
 
     def _eyebrow_to_dict(self, eyebrows: EyebrowMetrics) -> Dict:
@@ -893,7 +1279,11 @@ class GroomingAnalyzer:
             "thickness": eyebrows.thickness_score,
             "arch": eyebrows.arch_score,
             "definition": eyebrows.definition_score,
-            "level": "high" if eyebrows.overall_score > 0.7 else "medium" if eyebrows.overall_score > 0.45 else "low",
+            "level": (
+                "high"
+                if eyebrows.overall_score > 0.7
+                else "medium" if eyebrows.overall_score > 0.45 else "low"
+            ),
         }
 
     def _hair_to_dict(self, hair: HairMetrics) -> Dict:
@@ -904,7 +1294,11 @@ class GroomingAnalyzer:
             "texture": hair.texture_score,
             "shine": hair.shine_score,
             "neatness": hair.neatness_score,
-            "level": "high" if hair.overall_score > 0.7 else "medium" if hair.overall_score > 0.45 else "low",
+            "level": (
+                "high"
+                if hair.overall_score > 0.7
+                else "medium" if hair.overall_score > 0.45 else "low"
+            ),
         }
 
     # ========== ERROR HANDLING ==========
@@ -920,10 +1314,12 @@ class GroomingAnalyzer:
             "landmarks_detected": False,
             "landmark_count": 0,
             "error": message,
-            "recommendations": [{
-                "category": "technical",
-                "message": message,
-                "priority": "high",
-            }],
+            "recommendations": [
+                {
+                    "category": "technical",
+                    "message": message,
+                    "priority": "high",
+                }
+            ],
             "grooming_plan": [],
         }

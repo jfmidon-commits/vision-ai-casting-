@@ -380,7 +380,9 @@ class AuditService:
                     "before_state": log.before_state,
                     "after_state": log.after_state,
                     "metadata": log.metadata,
-                    "created_at": log.created_at.isoformat() if log.created_at else None,
+                    "created_at": (
+                        log.created_at.isoformat() if log.created_at else None
+                    ),
                 }
                 for log in logs
             ],
@@ -414,13 +416,16 @@ class AuditService:
             Lista de alterações da entidade
         """
         result = await db.execute(
-            select(AuditLog).where(
+            select(AuditLog)
+            .where(
                 and_(
                     AuditLog.tenant_id == tenant_id,
                     AuditLog.entity_type == entity_type,
                     AuditLog.entity_id == entity_id,
                 )
-            ).order_by(desc(AuditLog.created_at)).limit(limit)
+            )
+            .order_by(desc(AuditLog.created_at))
+            .limit(limit)
         )
         logs = result.scalars().all()
 
@@ -473,15 +478,16 @@ class AuditService:
             query = query.where(AuditLog.created_at <= end_date)
 
         # Estatísticas por ação
-        stats_query = select(
-            AuditLog.action,
-            func.count().label("count")
-        ).where(
-            and_(
-                AuditLog.tenant_id == tenant_id,
-                AuditLog.user_id == user_id,
+        stats_query = (
+            select(AuditLog.action, func.count().label("count"))
+            .where(
+                and_(
+                    AuditLog.tenant_id == tenant_id,
+                    AuditLog.user_id == user_id,
+                )
             )
-        ).group_by(AuditLog.action)
+            .group_by(AuditLog.action)
+        )
 
         stats_result = await db.execute(stats_query)
         stats = {row.action: row.count for row in stats_result.all()}
@@ -502,7 +508,9 @@ class AuditService:
                     "entity_type": log.entity_type,
                     "entity_id": log.entity_id,
                     "severity": log.severity,
-                    "created_at": log.created_at.isoformat() if log.created_at else None,
+                    "created_at": (
+                        log.created_at.isoformat() if log.created_at else None
+                    ),
                 }
                 for log in logs
             ],

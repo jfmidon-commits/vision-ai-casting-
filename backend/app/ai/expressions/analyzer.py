@@ -22,13 +22,13 @@ class ExpressionAnalyzer:
 
     def __init__(self):
         self._face_cascade = cv2.CascadeClassifier(
-            cv2.data.haarcascades + 'haarcascade_frontalface_alt2.xml'
+            cv2.data.haarcascades + "haarcascade_frontalface_alt2.xml"
         )
         self._eye_cascade = cv2.CascadeClassifier(
-            cv2.data.haarcascades + 'haarcascade_eye.xml'
+            cv2.data.haarcascades + "haarcascade_eye.xml"
         )
         self._smile_cascade = cv2.CascadeClassifier(
-            cv2.data.haarcascades + 'haarcascade_smile.xml'
+            cv2.data.haarcascades + "haarcascade_smile.xml"
         )
 
         # MediaPipe FaceMesh
@@ -48,6 +48,7 @@ class ExpressionAnalyzer:
         """Inicializa MediaPipe FaceMesh."""
         try:
             import mediapipe as mp
+
             self._mp_face_mesh = mp.solutions.face_mesh
             self._face_mesh = self._mp_face_mesh.FaceMesh(
                 static_image_mode=True,
@@ -66,6 +67,7 @@ class ExpressionAnalyzer:
         """Inicializa DeepFace."""
         try:
             from deepface import DeepFace
+
             self._deepface_available = True
             logger.info("DeepFace disponivel")
         except ImportError:
@@ -103,8 +105,8 @@ class ExpressionAnalyzer:
         x, y, w, h = largest_face
 
         # Extrair regiao do rosto
-        face_roi = gray[y:y+h, x:x+w]
-        face_roi_color = img[y:y+h, x:x+w]
+        face_roi = gray[y : y + h, x : x + w]
+        face_roi_color = img[y : y + h, x : x + w]
 
         # Tentar MediaPipe FaceMesh primeiro
         landmarks = self._get_mediapipe_landmarks(img, x, y, w, h)
@@ -119,13 +121,17 @@ class ExpressionAnalyzer:
         mouth = self._analyze_mouth(face_roi, y, h, landmarks)
 
         # Combinar resultados DeepFace + heuristica
-        expressions = self._combine_results(deepface_emotions, eyes, smile, eyebrows, mouth)
+        expressions = self._combine_results(
+            deepface_emotions, eyes, smile, eyebrows, mouth
+        )
 
         # Classificar expressao dominante
         dominant_expression = max(expressions, key=expressions.get)
 
         # Calcular confianca
-        confidence = self._calculate_confidence(eyes, smile, eyebrows, mouth, deepface_emotions)
+        confidence = self._calculate_confidence(
+            eyes, smile, eyebrows, mouth, deepface_emotions
+        )
 
         return {
             "dominant_expression": dominant_expression,
@@ -141,7 +147,12 @@ class ExpressionAnalyzer:
                 "landmark_count": len(landmarks) if landmarks else 0,
             },
             "face_detected": True,
-            "face_position": {"x": int(x), "y": int(y), "width": int(w), "height": int(h)},
+            "face_position": {
+                "x": int(x),
+                "y": int(y),
+                "width": int(w),
+                "height": int(h),
+            },
             "recommendations": self._generate_recommendations(
                 dominant_expression, eyes, smile, eyebrows, mouth
             ),
@@ -177,13 +188,15 @@ class ExpressionAnalyzer:
             landmarks = []
             h, w = img.shape[:2]
             for lm in face_landmarks.landmark:
-                landmarks.append({
-                    "x": lm.x,
-                    "y": lm.y,
-                    "z": lm.z,
-                    "px_x": int(lm.x * w),
-                    "px_y": int(lm.y * h),
-                })
+                landmarks.append(
+                    {
+                        "x": lm.x,
+                        "y": lm.y,
+                        "z": lm.z,
+                        "px_x": int(lm.x * w),
+                        "px_y": int(lm.y * h),
+                    }
+                )
 
             return landmarks
 
@@ -191,15 +204,13 @@ class ExpressionAnalyzer:
             logger.warning(f"Erro no MediaPipe FaceMesh: {e}")
             return None
 
-    def _get_landmark_region(
-        self, landmarks: list, indices: list
-    ) -> list:
+    def _get_landmark_region(self, landmarks: list, indices: list) -> list:
         """Extrai coordenadas de uma regiao especifica de landmarks."""
         return [landmarks[i] for i in indices if i < len(landmarks)]
 
     def _calculate_distance(self, p1: dict, p2: dict) -> float:
         """Calcula distancia euclidiana entre dois landmarks."""
-        return np.sqrt((p1["x"] - p2["x"])**2 + (p1["y"] - p2["y"])**2)
+        return np.sqrt((p1["x"] - p2["x"]) ** 2 + (p1["y"] - p2["y"]) ** 2)
 
     # ========== DEEPFACE ==========
 
@@ -261,8 +272,42 @@ class ExpressionAnalyzer:
         # MediaPipe landmarks para olhos
         if landmarks:
             # Indices dos olhos no FaceMesh
-            LEFT_EYE = [33, 246, 161, 160, 159, 158, 157, 173, 133, 155, 154, 153, 145, 144, 163, 7]
-            RIGHT_EYE = [362, 398, 384, 385, 386, 387, 388, 466, 263, 249, 390, 373, 374, 380, 381, 382]
+            LEFT_EYE = [
+                33,
+                246,
+                161,
+                160,
+                159,
+                158,
+                157,
+                173,
+                133,
+                155,
+                154,
+                153,
+                145,
+                144,
+                163,
+                7,
+            ]
+            RIGHT_EYE = [
+                362,
+                398,
+                384,
+                385,
+                386,
+                387,
+                388,
+                466,
+                263,
+                249,
+                390,
+                373,
+                374,
+                380,
+                381,
+                382,
+            ]
 
             left_eye = self._get_landmark_region(landmarks, LEFT_EYE)
             right_eye = self._get_landmark_region(landmarks, RIGHT_EYE)
@@ -321,9 +366,7 @@ class ExpressionAnalyzer:
 
         return (vertical_1 + vertical_2) / (2.0 * horizontal)
 
-    def _analyze_smile(
-        self, face_gray: np.ndarray, landmarks: Optional[list]
-    ) -> Dict:
+    def _analyze_smile(self, face_gray: np.ndarray, landmarks: Optional[list]) -> Dict:
         """Analisa sorriso usando landmarks ou Haar cascade."""
         smile_data = {
             "detected": False,
@@ -335,8 +378,50 @@ class ExpressionAnalyzer:
         # MediaPipe landmarks para boca
         if landmarks:
             # Indices da boca no FaceMesh
-            MOUTH_OUTER = [61, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291, 375, 321, 405, 314, 17, 84, 181, 91, 146]
-            MOUTH_INNER = [78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95]
+            MOUTH_OUTER = [
+                61,
+                185,
+                40,
+                39,
+                37,
+                0,
+                267,
+                269,
+                270,
+                409,
+                291,
+                375,
+                321,
+                405,
+                314,
+                17,
+                84,
+                181,
+                91,
+                146,
+            ]
+            MOUTH_INNER = [
+                78,
+                191,
+                80,
+                81,
+                82,
+                13,
+                312,
+                311,
+                310,
+                415,
+                308,
+                324,
+                318,
+                402,
+                317,
+                14,
+                87,
+                178,
+                88,
+                95,
+            ]
 
             outer_mouth = self._get_landmark_region(landmarks, MOUTH_OUTER)
             inner_mouth = self._get_landmark_region(landmarks, MOUTH_INNER)
@@ -429,7 +514,9 @@ class ExpressionAnalyzer:
                 avg_y = (left_y + right_y) / 2
 
                 # Normalizar: valores menores de Y = mais elevado (coordenadas Y crescem para baixo)
-                eyebrow_data["elevation_score"] = min(1.0, max(0.0, (0.5 - avg_y) / 0.2))
+                eyebrow_data["elevation_score"] = min(
+                    1.0, max(0.0, (0.5 - avg_y) / 0.2)
+                )
 
                 # Franzimento: proximidade entre as sobrancelhas
                 left_inner = left_brow[4]  # ponto interno esquerdo
@@ -437,19 +524,27 @@ class ExpressionAnalyzer:
                 brow_distance = self._calculate_distance(left_inner, right_inner)
 
                 # Distancia menor = mais franzido
-                eyebrow_data["furrow_score"] = min(1.0, max(0.0, (0.15 - brow_distance) / 0.1))
+                eyebrow_data["furrow_score"] = min(
+                    1.0, max(0.0, (0.15 - brow_distance) / 0.1)
+                )
 
                 # Simetria
-                left_height = max(p["y"] for p in left_brow) - min(p["y"] for p in left_brow)
-                right_height = max(p["y"] for p in right_brow) - min(p["y"] for p in right_brow)
-                eyebrow_data["symmetry"] = 1.0 - abs(left_height - right_height) / max(left_height + right_height, 0.01)
+                left_height = max(p["y"] for p in left_brow) - min(
+                    p["y"] for p in left_brow
+                )
+                right_height = max(p["y"] for p in right_brow) - min(
+                    p["y"] for p in right_brow
+                )
+                eyebrow_data["symmetry"] = 1.0 - abs(left_height - right_height) / max(
+                    left_height + right_height, 0.01
+                )
 
                 return eyebrow_data
 
         # Fallback: gradientes
         eyebrow_data["method"] = "gradient"
         h, w = face_gray.shape
-        eyebrow_region = face_gray[:int(h*0.4), :]
+        eyebrow_region = face_gray[: int(h * 0.4), :]
 
         grad_y = cv2.Sobel(eyebrow_region, cv2.CV_64F, 0, 1, ksize=3)
         grad_y = np.abs(grad_y)
@@ -461,16 +556,19 @@ class ExpressionAnalyzer:
 
         eyebrow_data["elevation_score"] = min(1.0, avg_grad / 50)
 
-        center_region = eyebrow_region[:, int(w*0.3):int(w*0.7)]
-        center_grad = np.mean(np.abs(cv2.Sobel(center_region, cv2.CV_64F, 0, 1, ksize=3)))
+        center_region = eyebrow_region[:, int(w * 0.3) : int(w * 0.7)]
+        center_grad = np.mean(
+            np.abs(cv2.Sobel(center_region, cv2.CV_64F, 0, 1, ksize=3))
+        )
         eyebrow_data["furrow_score"] = min(1.0, center_grad / 40)
-        eyebrow_data["symmetry"] = 1.0 - abs(left_grad - right_grad) / max(left_grad + right_grad, 1)
+        eyebrow_data["symmetry"] = 1.0 - abs(left_grad - right_grad) / max(
+            left_grad + right_grad, 1
+        )
 
         return eyebrow_data
 
     def _analyze_mouth(
-        self, face_gray: np.ndarray, face_y: int, face_h: int,
-        landmarks: Optional[list]
+        self, face_gray: np.ndarray, face_y: int, face_h: int, landmarks: Optional[list]
     ) -> Dict:
         """Analisa formato e posicao da boca."""
         mouth_data = {
@@ -482,7 +580,28 @@ class ExpressionAnalyzer:
 
         # MediaPipe landmarks para boca
         if landmarks:
-            MOUTH_OUTER = [61, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291, 375, 321, 405, 314, 17, 84, 181, 91, 146]
+            MOUTH_OUTER = [
+                61,
+                185,
+                40,
+                39,
+                37,
+                0,
+                267,
+                269,
+                270,
+                409,
+                291,
+                375,
+                321,
+                405,
+                314,
+                17,
+                84,
+                181,
+                91,
+                146,
+            ]
 
             mouth = self._get_landmark_region(landmarks, MOUTH_OUTER)
             if mouth:
@@ -518,7 +637,7 @@ class ExpressionAnalyzer:
         # Fallback: gradientes
         mouth_data["method"] = "gradient"
         h, w = face_gray.shape
-        mouth_region = face_gray[int(h*0.55):, :]
+        mouth_region = face_gray[int(h * 0.55) :, :]
 
         if mouth_region.size == 0:
             return mouth_data
@@ -530,8 +649,8 @@ class ExpressionAnalyzer:
         mouth_data["openness"] = min(1.0, darkness * 2)
 
         grad_x = cv2.Sobel(mouth_region, cv2.CV_64F, 1, 0, ksize=3)
-        left_corner = np.mean(grad_x[:, :mouth_w//3])
-        right_corner = np.mean(grad_x[:, 2*mouth_w//3:])
+        left_corner = np.mean(grad_x[:, : mouth_w // 3])
+        right_corner = np.mean(grad_x[:, 2 * mouth_w // 3 :])
 
         corners_up = max(0, (left_corner + right_corner) / 200)
         corners_down = max(0, -(left_corner + right_corner) / 200)
@@ -544,8 +663,12 @@ class ExpressionAnalyzer:
     # ========== COMBINAR RESULTADOS ==========
 
     def _combine_results(
-        self, deepface_emotions: Optional[Dict],
-        eyes: Dict, smile: Dict, eyebrows: Dict, mouth: Dict
+        self,
+        deepface_emotions: Optional[Dict],
+        eyes: Dict,
+        smile: Dict,
+        eyebrows: Dict,
+        mouth: Dict,
     ) -> Dict[str, float]:
         """
         Combina resultados do DeepFace com analise heuristica.
@@ -576,7 +699,11 @@ class ExpressionAnalyzer:
     # ========== SCORING ==========
 
     def _score_neutral(self, eyes, smile, eyebrows, mouth) -> float:
-        if not smile["detected"] and eyebrows["elevation_score"] < 0.3 and eyebrows["furrow_score"] < 0.3:
+        if (
+            not smile["detected"]
+            and eyebrows["elevation_score"] < 0.3
+            and eyebrows["furrow_score"] < 0.3
+        ):
             return 0.8
         return 0.2
 
@@ -654,39 +781,49 @@ class ExpressionAnalyzer:
         recs = []
 
         if dominant == "neutral":
-            recs.append({
-                "type": "performance",
-                "message": "Expressao neutra bem controlada. Praticar variacoes sutis para casting.",
-                "priority": "medium"
-            })
+            recs.append(
+                {
+                    "type": "performance",
+                    "message": "Expressao neutra bem controlada. Praticar variacoes sutis para casting.",
+                    "priority": "medium",
+                }
+            )
 
         if dominant == "happy":
-            recs.append({
-                "type": "performance",
-                "message": f"Sorriso {smile['intensity']} detectado. Para comerciais, praticar intensidades variadas.",
-                "priority": "low"
-            })
+            recs.append(
+                {
+                    "type": "performance",
+                    "message": f"Sorriso {smile['intensity']} detectado. Para comerciais, praticar intensidades variadas.",
+                    "priority": "low",
+                }
+            )
 
         if smile["score"] > 0.8:
-            recs.append({
-                "type": "casting",
-                "message": "Sorriso amplo e ideal para comerciais, publicidade e papeis de 'cara do povo'.",
-                "priority": "high"
-            })
+            recs.append(
+                {
+                    "type": "casting",
+                    "message": "Sorriso amplo e ideal para comerciais, publicidade e papeis de 'cara do povo'.",
+                    "priority": "high",
+                }
+            )
 
         if eyebrows["furrow_score"] > 0.5:
-            recs.append({
-                "type": "performance",
-                "message": "Franzimento detectado. Para papeis dramaticos, controlar intensidade.",
-                "priority": "medium"
-            })
+            recs.append(
+                {
+                    "type": "performance",
+                    "message": "Franzimento detectado. Para papeis dramaticos, controlar intensidade.",
+                    "priority": "medium",
+                }
+            )
 
         if not eyes["detected"]:
-            recs.append({
-                "type": "technical",
-                "message": "Olhos nao detectados claramente. Verificar iluminacao da foto.",
-                "priority": "high"
-            })
+            recs.append(
+                {
+                    "type": "technical",
+                    "message": "Olhos nao detectados claramente. Verificar iluminacao da foto.",
+                    "priority": "high",
+                }
+            )
 
         return recs
 
@@ -698,9 +835,7 @@ class ExpressionAnalyzer:
             "details": {},
             "face_detected": False,
             "error": message,
-            "recommendations": [{
-                "type": "technical",
-                "message": message,
-                "priority": "high"
-            }],
+            "recommendations": [
+                {"type": "technical", "message": message, "priority": "high"}
+            ],
         }
