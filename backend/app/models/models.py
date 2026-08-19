@@ -312,8 +312,43 @@ class AuditLog(Base):
     after_state = Column(JSONB)
     ip_address = Column(String(50))
     user_agent = Column(Text)
+    severity = Column(String(20), default="info")  # info, warning, error, critical
     _metadata = Column(JSONB, default=dict)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class UserMemory(Base):
+    """Memorias persistentes de usuarios no Vision Ecosystem."""
+    __tablename__ = "user_memories"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    memory_key = Column(String(255), nullable=False)
+    category = Column(String(100), default="general")
+    value = Column(JSONB, default=dict)
+    access_count = Column(Integer, default=0)
+    expires_at = Column(DateTime(timezone=True))
+    last_accessed_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        # Constraint unica: um usuario nao pode ter duas memorias com a mesma chave
+        {'schema': 'public'},
+    )
+
+
+class UserFeedback(Base):
+    """Feedbacks de usuarios sobre itens do sistema."""
+    __tablename__ = "user_feedbacks"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    item_type = Column(String(100), nullable=False)  # analysis, report, casting, etc.
+    item_id = Column(String(255), nullable=False)
+    feedback_text = Column(Text)
+    rating = Column(Integer)  # 1-5
+    _metadata = Column(JSONB, default=dict)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class VoiceCommand(Base):
