@@ -2,23 +2,42 @@
 
 This script intentionally performs one real OpenAI image edit. It must only run
 when OPENAI_API_KEY is injected by the runtime/CI secret store.
+
+The image simulator module is loaded directly from its file so this focused
+smoke test does not import the full visagism package (MediaPipe/OpenCV, etc.).
 """
 
 from __future__ import annotations
 
 import asyncio
 import base64
+import importlib.util
 import io
 import os
+import sys
 from pathlib import Path
 
 from PIL import Image
 
-from app.ai.visagism.image_simulator import VisagismImageSimulator
 
-
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+SIMULATOR_PATH = BACKEND_ROOT / "app" / "ai" / "visagism" / "image_simulator.py"
 FIXTURE = Path("tests/fixtures/visagism/dataset_001/01_frontal_neutra_close.jpg")
 OUTPUT = Path("benchmark_results/live/visagism_visual_smoke.png")
+
+
+def _load_simulator_class():
+    """Load only image_simulator.py without executing visagism/__init__.py."""
+    spec = importlib.util.spec_from_file_location(
+        "vision_visagism_image_simulator", SIMULATOR_PATH
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Nao foi possivel carregar {SIMULATOR_PATH}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module.VisagismImageSimulator
+
 
 RECOMMENDATION = {
     "display_name": "Topo texturizado com volume e taper suave",
@@ -41,6 +60,7 @@ async def main() -> None:
     if not FIXTURE.exists():
         raise SystemExit(f"LIVE_SMOKE_BLOCKED: fixture nao encontrada: {FIXTURE}")
 
+    VisagismImageSimulator = _load_simulator_class()
     simulator = VisagismImageSimulator()
     result = await simulator.generate(
         source_photo_url=str(FIXTURE),
