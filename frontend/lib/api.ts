@@ -57,6 +57,17 @@ export const analysisApi = {
     api.post(`/api/v1/ai/analyze?photoshoot_id=${photoshootId}`, data),
 };
 
+export const visagismApi = {
+  analyzeUpload: (file: File, angle = "front") => {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("angle", angle);
+    return api.post("/api/v1/ai/analyze/visagism/upload", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+};
+
 export const reportApi = {
   list: (params?: any) => api.get("/api/v1/reports", { params }),
   get: (id: string) => api.get(`/api/v1/reports/${id}`),
