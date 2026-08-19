@@ -9,6 +9,14 @@ on:
       - "backend/scripts/visagism_visual_live_smoke.py"
       - "backend/app/ai/visagism/image_simulator.py"
       - "backend/app/config.py"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/visagism-live-smoke.yml"
+      - ".github/live-smoke-trigger.txt"
+      - "backend/scripts/visagism_visual_live_smoke.py"
+      - "backend/app/ai/visagism/image_simulator.py"
+      - "backend/app/config.py"
 
 permissions:
   contents: read
