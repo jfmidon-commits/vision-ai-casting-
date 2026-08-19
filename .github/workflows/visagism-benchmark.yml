@@ -29,6 +29,7 @@ on:
 
 env:
   PYTHON_VERSION: "3.11"
+  BENCHMARK_VERSION: "2-real-facemesh"
 
 jobs:
   benchmark:
@@ -93,6 +94,7 @@ jobs:
           echo "=========================================="
           echo "  VISAGISM BENCHMARK COMPLETE"
           echo "=========================================="
+          echo "Version: $BENCHMARK_VERSION"
           echo "Dataset: ${{ steps.check_dataset.outputs.dataset_path }}"
           echo "Images: ${{ steps.check_dataset.outputs.has_images }}"
           echo "Artifact: visagism-benchmark-dataset-001"
