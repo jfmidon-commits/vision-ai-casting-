@@ -75,7 +75,32 @@ async def get_visagism_analysis(
     analysis = result.scalar_one_or_none()
     if not analysis:
         raise HTTPException(status_code=404, detail="Analysis not found")
-    return APIResponse(data=analysis.visagism)
+
+    if analysis.visagism:
+        data = dict(analysis.visagism)
+        data["status"] = analysis.status
+        return APIResponse(data=data)
+
+    return APIResponse(
+        data={
+            "schema_version": "1.0",
+            "analysis_id": str(analysis.id),
+            "photoshoot_id": str(analysis.photoshoot_id),
+            "status": analysis.status,
+            "processed_images": 0,
+            "selected_views": {},
+            "face_shape": None,
+            "measurements": {},
+            "hair_analysis": {},
+            "recommendations": [],
+            "top_recommendation": None,
+            "card_url": None,
+            "manifest_url": None,
+            "analysis_sources": [],
+            "limitations": ["analysis_failed"] if analysis.status == "failed" else [],
+            "integrity": {},
+        }
+    )
 
 @router.get("/{analysis_id}/casting", response_model=APIResponse)
 async def get_casting_analysis(
