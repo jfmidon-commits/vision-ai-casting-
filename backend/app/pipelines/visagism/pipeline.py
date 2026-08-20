@@ -1,16 +1,19 @@
-"""Minimal reproducible visagism pipeline.
-
-This first stage deliberately reuses the existing ImageTriageEngine and keeps
-all outputs traceable to real triage evidence. Later stages can add facial
-measurements, hair analysis, recommendations and card generation without
-changing the contract established here.
-"""
+"""Reproducible visagism pipeline built from Vision's real analyzers."""
 
 from __future__ import annotations
 
+import os
 from typing import Dict, List, Optional
 
-from app.ai.image_triage.engine import ImageTriageEngine, TriageCategory, TriageResult
+from app.ai.grooming.analyzer import GroomingAnalyzer
+from app.ai.image_triage.engine import (
+    ImageTriageEngine,
+    TriageCategory,
+    TriageResult,
+)
+from app.pipelines.visagism.cut_recommendations import CutRecommendationEngine
+from app.pipelines.visagism.hair_analysis import HairAnalysisEngine
+from app.pipelines.visagism.measurements import FacialMeasurementEngine
 
 
 class RealVisagismPipeline:
@@ -28,8 +31,28 @@ class RealVisagismPipeline:
         TriageCategory.SMILING,
     )
 
-    def __init__(self, triage_engine: Optional[ImageTriageEngine] = None) -> None:
+    FACIAL_EVIDENCE_ORDER = (
+        TriageCategory.FRONTAL.value,
+        TriageCategory.HAIRLINE.value,
+        TriageCategory.THREE_QUARTER_RIGHT.value,
+        TriageCategory.THREE_QUARTER_LEFT.value,
+    )
+
+    def __init__(
+        self,
+        triage_engine: Optional[ImageTriageEngine] = None,
+        measurement_engine: Optional[FacialMeasurementEngine] = None,
+        grooming_analyzer: Optional[GroomingAnalyzer] = None,
+        hair_engine: Optional[HairAnalysisEngine] = None,
+        cut_engine: Optional[CutRecommendationEngine] = None,
+    ) -> None:
         self.triage_engine = triage_engine or ImageTriageEngine()
+        self.measurement_engine = measurement_engine or FacialMeasurementEngine(
+            self.triage_engine
+        )
+        self.grooming_analyzer = grooming_analyzer or GroomingAnalyzer()
+        self.hair_engine = hair_engine or HairAnalysisEngine()
+        self.cut_engine = cut_engine or CutRecommendationEngine()
 
     def run_triage(self, dataset_path: str) -> Dict:
         """Process a real dataset and return evidence plus selected best views."""
@@ -55,6 +78,92 @@ class RealVisagismPipeline:
             "evidence_source": "ImageTriageEngine",
             "limitations": self._limitations(results, missing_views),
         }
+
+    def run_measurements(self, image_path: str) -> Dict:
+        """Measure a selected face using real MediaPipe FaceLandmarker evidence."""
+        return self.measurement_engine.analyze_image(image_path)
+
+    def run_hair_analysis(self, image_path: str, triage_output: Dict) -> Dict:
+        """Run real grooming analysis and normalize its hair evidence."""
+        try:
+            with open(image_path, "rb") as image_file:
+                grooming = self.grooming_analyzer.analyze(image_file.read())
+        except OSError as exc:
+            return {
+                "observed": {},
+                "estimated": {},
+                "not_determinable": {},
+                "evidence_sources": [],
+                "limitations": [f"image_read_error:{exc}"],
+            }
+        return self.hair_engine.analyze(grooming, triage_output)
+
+    def recommend_cuts(
+        self,
+        measurements: Dict,
+        hair_analysis: Dict,
+        limit: int = 5,
+    ) -> Dict:
+        """Rank cuts from measured face shape and structured hair evidence."""
+        face_shape = measurements.get("face_shape", {})
+        shape_value = (
+            face_shape.get("value", "mixed")
+            if isinstance(face_shape, dict)
+            else "mixed"
+        )
+        return self.cut_engine.recommend(shape_value, hair_analysis, limit=limit)
+
+    def run(self, dataset_path: str, cut_limit: int = 5) -> Dict:
+        """Execute the currently implemented real pipeline end to end."""
+        triage = self.run_triage(dataset_path)
+        evidence_image = self._select_facial_evidence_image(dataset_path, triage)
+        limitations = list(triage.get("limitations", []))
+
+        if not evidence_image:
+            limitations.append("no_suitable_facial_evidence_image")
+            return {
+                "triage": triage,
+                "measurements": {},
+                "hair_analysis": {},
+                "cut_recommendations": {"options": [], "primary": None},
+                "limitations": limitations,
+            }
+
+        measurements = self.run_measurements(evidence_image)
+        hair_analysis = self.run_hair_analysis(evidence_image, triage)
+        recommendations = self.recommend_cuts(
+            measurements,
+            hair_analysis,
+            limit=cut_limit,
+        )
+        limitations.extend(measurements.get("limitations", []))
+        limitations.extend(hair_analysis.get("limitations", []))
+
+        return {
+            "triage": triage,
+            "evidence_image": evidence_image,
+            "measurements": measurements,
+            "hair_analysis": hair_analysis,
+            "cut_recommendations": recommendations,
+            "limitations": list(dict.fromkeys(limitations)),
+        }
+
+    def _select_facial_evidence_image(
+        self,
+        dataset_path: str,
+        triage_output: Dict,
+    ) -> Optional[str]:
+        selected = triage_output.get("selected_views", {})
+        if not isinstance(selected, dict):
+            return None
+        for category in self.FACIAL_EVIDENCE_ORDER:
+            result = selected.get(category)
+            if not isinstance(result, dict):
+                continue
+            filename = result.get("filename")
+            if filename:
+                return os.path.join(dataset_path, filename)
+        return None
 
     @staticmethod
     def _serialize_result(result: TriageResult) -> Dict:
