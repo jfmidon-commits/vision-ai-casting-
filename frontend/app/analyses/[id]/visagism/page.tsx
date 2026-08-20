@@ -27,6 +27,18 @@ function renderValue(value: unknown): string {
   return String(value);
 }
 
+function getSelectedViewUrl(selectedViews: Record<string, unknown>): string | null {
+  const preferredKeys = ["frontal", "front", "hairline", "three_quarter_right", "three_quarter_left"];
+  for (const key of preferredKeys) {
+    const candidate = selectedViews[key];
+    if (!candidate || typeof candidate !== "object") continue;
+    const record = candidate as Record<string, unknown>;
+    const url = record.url;
+    if (typeof url === "string" && url.startsWith("http")) return url;
+  }
+  return null;
+}
+
 function EvidenceCard({ title, data }: { title: string; data: Record<string, unknown> }) {
   const entries = Object.entries(data || {});
   if (!entries.length) return null;
@@ -52,6 +64,8 @@ export default function VisagismResultPage() {
   const { data, isLoading, isError } = useVisagismResult(analysisId);
   const [cardFailed, setCardFailed] = useState(false);
   const [shareMessage, setShareMessage] = useState<string | null>(null);
+
+  const originalImageUrl = data ? getSelectedViewUrl(data.selected_views) : null;
 
   const shareCard = async () => {
     if (!data?.card_url) return;
@@ -105,37 +119,26 @@ export default function VisagismResultPage() {
 
             <section className="space-y-3"><h2 className="text-xl font-semibold">5 cortes ranqueados</h2><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{data.recommendations.map((cut) => <Card key={`${cut.rank}-${cut.key}`}><CardHeader><div className="flex items-center justify-between gap-2"><CardTitle className="text-lg">#{cut.rank} {cut.name}</CardTitle><Badge variant="secondary">{Math.round(cut.compatibility_score * 100)}%</Badge></div></CardHeader><CardContent className="space-y-2 text-sm"><p><strong>Topo:</strong> {cut.top_cm.join("–")} cm</p><p><strong>Laterais:</strong> {cut.sides_mm.join("–")} mm</p><p><strong>Manutenção:</strong> {cut.maintenance}</p>{cut.reasons[0] && <p className="text-muted-foreground">{cut.reasons[0]}</p>}</CardContent></Card>)}</div></section>
 
-            {data.card_url && <Card><CardHeader><CardTitle>Card para o barbeiro</CardTitle></CardHeader><CardContent className="space-y-4">{!cardFailed ? <img src={data.card_url} alt="Card visual de visagismo para o barbeiro" onError={() => setCardFailed(true)} className="mx-auto max-h-[720px] w-auto max-w-full rounded-lg border" /> : <div className="rounded-lg border p-6 text-center text-sm text-muted-foreground">O card foi gerado, mas não foi possível carregar a imagem agora. Use o botão abaixo para abrir o arquivo diretamente.</div>}<div className="flex flex-col gap-2 sm:flex-row"><Button asChild><a href={data.card_url} target="_blank" rel="noreferrer"><Download className="mr-2 h-4 w-4" /> Abrir / baixar card</a></Button><Button variant="outline" onClick={shareCard}><Share2 className="mr-2 h-4 w-4" /> Compartilhar</Button></div>{shareMessage && <p className="text-sm text-muted-foreground">{shareMessage}</p>}</CardContent></Card>}
+            {data.card_url && <Card><CardHeader><CardTitle>Card para o barbeiro</CardTitle></CardHeader><CardContent className="space-y-4">{!cardFailed ? <img src={data.card_url} alt="Card visual de visagismo para o barbeiro" onError={() => setCardFailed(true)} className="mx-auto max-h-[720px] w-auto max-w-full rounded-lg border" /> : <div className="rounded-lg border p-6 text-center text-sm text-muted-foreground">O card foi gerado, mas não foi possível carregar a imagem agora. Use o botão abaixo para abrir o arquivo diretamente.</div>}<div className="flex flex-col gap-2 sm:flex-row"><a href={data.card_url} target="_blank" rel="noreferrer" className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"><Download className="mr-2 h-4 w-4" /> Abrir / baixar card</a><Button variant="outline" onClick={shareCard}><Share2 className="mr-2 h-4 w-4" /> Compartilhar</Button></div>{shareMessage && <p className="text-sm text-muted-foreground">{shareMessage}</p>}</CardContent></Card>}
 
             {data.simulation_url && (
               <Card>
-                <CardHeader>
-                  <CardTitle>Simulação do corte</CardTitle>
-                </CardHeader>
+                <CardHeader><CardTitle>Simulação do corte</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {originalImageUrl && (
+                      <div>
+                        <p className="mb-2 text-sm text-muted-foreground">Antes</p>
+                        <img src={originalImageUrl} alt="Foto original" className="aspect-[3/4] w-full rounded-lg border object-cover" />
+                      </div>
+                    )}
                     <div>
-                      <p className="text-sm text-muted-foreground mb-2">Antes</p>
-                      <img
-                        src={data.selected_views?.frontal?.url || data.selected_views?.frontal?.filename || ""}
-                        alt="Foto original"
-                        className="rounded-lg border w-full aspect-[3/4] object-cover"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                      />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-2">Depois (simulação)</p>
-                      <img
-                        src={data.simulation_url}
-                        alt="Simulação do corte recomendado"
-                        className="rounded-lg border w-full aspect-[3/4] object-cover"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                      />
+                      <p className="mb-2 text-sm text-muted-foreground">Depois (simulação)</p>
+                      <img src={data.simulation_url} alt="Simulação do corte recomendado" className="aspect-[3/4] w-full rounded-lg border object-cover" />
                     </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Simulação gerada por IA. Resultado pode variar. Sempre consulte um profissional.
-                  </p>
+                  {!originalImageUrl && <p className="text-xs text-muted-foreground">A foto original pública não está disponível neste resultado; exibindo apenas a simulação.</p>}
+                  <p className="text-xs text-muted-foreground">Simulação gerada por IA. Resultado pode variar. Sempre consulte um profissional.</p>
                 </CardContent>
               </Card>
             )}
