@@ -3,7 +3,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from app.pipelines.visagism.simulation import (
     HairMaskGenerator,
@@ -83,8 +83,15 @@ class TestIdentityValidator:
         """Different images must have low similarity."""
         img1 = tmp_path / "a.jpg"
         img2 = tmp_path / "b.jpg"
-        Image.new("RGB", (100, 100), color="red").save(img1, format="JPEG")
-        Image.new("RGB", (100, 100), color="blue").save(img2, format="JPEG")
+        # Create structurally different images (not just color swaps)
+        # Image 1: white left half, black right half
+        i1 = Image.new("RGB", (100, 100), color="white")
+        ImageDraw.Draw(i1).rectangle([50, 0, 100, 100], fill="black")
+        i1.save(img1, format="JPEG")
+        # Image 2: black left half, white right half (inverted)
+        i2 = Image.new("RGB", (100, 100), color="black")
+        ImageDraw.Draw(i2).rectangle([50, 0, 100, 100], fill="white")
+        i2.save(img2, format="JPEG")
         preserved, score = IdentityValidator.validate(str(img1), str(img2))
         assert preserved is False
         assert score < 0.82
