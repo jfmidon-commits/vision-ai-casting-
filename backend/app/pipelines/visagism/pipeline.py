@@ -11,6 +11,7 @@ from app.ai.image_triage.engine import (
     TriageCategory,
     TriageResult,
 )
+from app.pipelines.visagism.card_generator import BarberCardGenerator
 from app.pipelines.visagism.cut_recommendations import CutRecommendationEngine
 from app.pipelines.visagism.hair_analysis import HairAnalysisEngine
 from app.pipelines.visagism.measurements import FacialMeasurementEngine
@@ -45,6 +46,7 @@ class RealVisagismPipeline:
         grooming_analyzer: Optional[GroomingAnalyzer] = None,
         hair_engine: Optional[HairAnalysisEngine] = None,
         cut_engine: Optional[CutRecommendationEngine] = None,
+        card_generator: Optional[BarberCardGenerator] = None,
     ) -> None:
         self.triage_engine = triage_engine or ImageTriageEngine()
         self.measurement_engine = measurement_engine or FacialMeasurementEngine(
@@ -53,6 +55,7 @@ class RealVisagismPipeline:
         self.grooming_analyzer = grooming_analyzer or GroomingAnalyzer()
         self.hair_engine = hair_engine or HairAnalysisEngine()
         self.cut_engine = cut_engine or CutRecommendationEngine()
+        self.card_generator = card_generator or BarberCardGenerator()
 
     def run_triage(self, dataset_path: str) -> Dict:
         """Process a real dataset and return evidence plus selected best views."""
@@ -113,8 +116,29 @@ class RealVisagismPipeline:
         )
         return self.cut_engine.recommend(shape_value, hair_analysis, limit=limit)
 
-    def run(self, dataset_path: str, cut_limit: int = 5) -> Dict:
-        """Execute the currently implemented real pipeline end to end."""
+    def generate_card(
+        self,
+        evidence_image: str,
+        recommendations: Dict,
+        output_path: str,
+    ) -> Optional[Dict]:
+        """Generate the technical PNG card from the primary recommendation."""
+        primary = recommendations.get("primary")
+        if not isinstance(primary, dict):
+            return None
+        return self.card_generator.generate(
+            evidence_image,
+            primary,
+            output_path,
+        )
+
+    def run(
+        self,
+        dataset_path: str,
+        cut_limit: int = 5,
+        card_output_path: Optional[str] = None,
+    ) -> Dict:
+        """Execute the implemented real pipeline end to end."""
         triage = self.run_triage(dataset_path)
         evidence_image = self._select_facial_evidence_image(dataset_path, triage)
         limitations = list(triage.get("limitations", []))
@@ -126,6 +150,7 @@ class RealVisagismPipeline:
                 "measurements": {},
                 "hair_analysis": {},
                 "cut_recommendations": {"options": [], "primary": None},
+                "card": None,
                 "limitations": limitations,
             }
 
@@ -136,6 +161,14 @@ class RealVisagismPipeline:
             hair_analysis,
             limit=cut_limit,
         )
+        card = None
+        if card_output_path:
+            card = self.generate_card(
+                evidence_image,
+                recommendations,
+                card_output_path,
+            )
+
         limitations.extend(measurements.get("limitations", []))
         limitations.extend(hair_analysis.get("limitations", []))
 
@@ -145,6 +178,7 @@ class RealVisagismPipeline:
             "measurements": measurements,
             "hair_analysis": hair_analysis,
             "cut_recommendations": recommendations,
+            "card": card,
             "limitations": list(dict.fromkeys(limitations)),
         }
 
