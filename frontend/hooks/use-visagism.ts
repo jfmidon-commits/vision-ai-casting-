@@ -29,8 +29,8 @@ export function useVisagismResult(analysisId?: string) {
       return response.data.data as FullVisagismAnalysis | null;
     },
     refetchInterval: (query) => {
-      const data = query.state.data;
-      return data && data.status === "completed" ? false : 2500;
+      const status = query.state.data?.status;
+      return status === "completed" || status === "failed" ? false : 2500;
     },
   });
 }
