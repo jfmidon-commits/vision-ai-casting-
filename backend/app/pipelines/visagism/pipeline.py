@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import os
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
-from app.ai.grooming.analyzer import GroomingAnalyzer
 from app.ai.image_triage.engine import (
     ImageTriageEngine,
     TriageCategory,
@@ -13,6 +12,7 @@ from app.ai.image_triage.engine import (
 )
 from app.pipelines.visagism.card_generator import BarberCardGenerator
 from app.pipelines.visagism.cut_recommendations import CutRecommendationEngine
+from app.pipelines.visagism.grooming_hair_adapter import GroomingHairEvidenceAdapter
 from app.pipelines.visagism.hair_analysis import HairAnalysisEngine
 from app.pipelines.visagism.measurements import FacialMeasurementEngine
 from app.pipelines.visagism.simulation import (
@@ -47,7 +47,7 @@ class RealVisagismPipeline:
         self,
         triage_engine: Optional[ImageTriageEngine] = None,
         measurement_engine: Optional[FacialMeasurementEngine] = None,
-        grooming_analyzer: Optional[GroomingAnalyzer] = None,
+        grooming_analyzer: Optional[Any] = None,
         hair_engine: Optional[HairAnalysisEngine] = None,
         cut_engine: Optional[CutRecommendationEngine] = None,
         card_generator: Optional[BarberCardGenerator] = None,
@@ -57,7 +57,10 @@ class RealVisagismPipeline:
         self.measurement_engine = measurement_engine or FacialMeasurementEngine(
             self.triage_engine
         )
-        self.grooming_analyzer = grooming_analyzer or GroomingAnalyzer()
+        # Keep the injection name for backwards compatibility with tests/callers,
+        # but default to a hair-only adapter. Haircut recommendations must not
+        # depend on unrelated beard/skin/eyebrow analysis succeeding.
+        self.grooming_analyzer = grooming_analyzer or GroomingHairEvidenceAdapter()
         self.hair_engine = hair_engine or HairAnalysisEngine()
         self.cut_engine = cut_engine or CutRecommendationEngine()
         self.card_generator = card_generator or BarberCardGenerator()
@@ -93,7 +96,7 @@ class RealVisagismPipeline:
         return self.measurement_engine.analyze_image(image_path)
 
     def run_hair_analysis(self, image_path: str, triage_output: Dict) -> Dict:
-        """Run real grooming analysis and normalize its hair evidence."""
+        """Run real hair-only grooming analysis and normalize its evidence."""
         try:
             with open(image_path, "rb") as image_file:
                 grooming = self.grooming_analyzer.analyze(image_file.read())
