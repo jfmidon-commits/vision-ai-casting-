@@ -26,6 +26,7 @@ def test_real_dataset_runs_through_reproducible_pipeline(
         str(real_visagism_dataset),
         cut_limit=5,
         card_output_path=str(card_path),
+        include_report=True,
     )
 
     assert result["triage"]["processed_images"] >= 10
@@ -43,3 +44,7 @@ def test_real_dataset_runs_through_reproducible_pipeline(
         assert card.format == "PNG"
 
     assert result["card"]["synthetic_simulation_used"] is False
+    assert result["report"]["schema_version"] == "1.0"
+    assert result["report"]["evidence"]["processed_images"] >= 10
+    assert result["report"]["integrity"]["physical_measurements_claimed"] is False
+    assert result["report"]["integrity"]["synthetic_simulation_presented_as_real"] is False
