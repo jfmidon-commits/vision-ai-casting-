@@ -20,6 +20,7 @@ class BarberCardGenerator:
         recommendation: Mapping[str, Any],
         output_path: str,
         title: str = "VISION - Especificacao de Corte",
+        simulation_path: Optional[str] = None,
     ) -> Dict[str, Any]:
         canvas = Image.new("RGB", (self.WIDTH, self.HEIGHT), "white")
         draw = ImageDraw.Draw(canvas)
@@ -38,7 +39,17 @@ class BarberCardGenerator:
         )
 
         image_box = (60, 170, 1020, 900)
-        self._paste_reference(canvas, evidence_image_path, image_box)
+        if simulation_path and os.path.isfile(simulation_path):
+            # Side by side: real photo left, simulation right
+            left_box = (60, 170, 530, 900)
+            right_box = (550, 170, 1020, 900)
+            self._paste_reference(canvas, evidence_image_path, left_box)
+            self._paste_reference(canvas, simulation_path, right_box)
+            # Labels
+            draw.text((60, 910), "Foto real", fill="black", font=small_font)
+            draw.text((550, 910), "Simulacao", fill="black", font=small_font)
+        else:
+            self._paste_reference(canvas, evidence_image_path, image_box)
 
         y = 945
         name = str(recommendation.get("name", "Corte nao selecionado"))
@@ -82,9 +93,13 @@ class BarberCardGenerator:
 
         footer_y = self.HEIGHT - 135
         draw.line((60, footer_y, 1020, footer_y), fill="black", width=2)
+        if simulation_path and os.path.isfile(simulation_path):
+            footer_text = "Simulacao gerada por IA. Resultado pode variar. Sempre consulte um profissional."
+        else:
+            footer_text = "Sem simulacao fotorealista: nenhuma imagem artificial foi apresentada como resultado real."
         draw.text(
             (60, footer_y + 20),
-            "Sem simulacao fotorealista: nenhuma imagem artificial foi apresentada como resultado real.",
+            footer_text,
             fill="black",
             font=small_font,
         )
@@ -97,7 +112,8 @@ class BarberCardGenerator:
             "height": self.HEIGHT,
             "format": "PNG",
             "reference_image": evidence_image_path,
-            "synthetic_simulation_used": False,
+            "simulation_image": simulation_path if (simulation_path and os.path.isfile(simulation_path)) else None,
+            "synthetic_simulation_used": bool(simulation_path and os.path.isfile(simulation_path)),
         }
 
     @staticmethod

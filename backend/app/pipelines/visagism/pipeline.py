@@ -79,9 +79,9 @@ class RealVisagismPipeline:
         return self.cut_engine.recommend(shape_value, hair_analysis, limit=limit)
 
     def generate_card(self, evidence_image: str, recommendations: Dict,
-                      output_path: str) -> Optional[Dict]:
+                      output_path: str, simulation_path: Optional[str] = None) -> Optional[Dict]:
         primary = recommendations.get("primary")
-        return self.card_generator.generate(evidence_image, primary, output_path) if isinstance(primary, dict) else None
+        return self.card_generator.generate(evidence_image, primary, output_path, simulation_path=simulation_path) if isinstance(primary, dict) else None
 
     def run_simulation(self, evidence_image: str, recommendations: Dict,
                        output_path: Optional[str] = None) -> Dict:
@@ -117,7 +117,8 @@ class RealVisagismPipeline:
             hair_analysis = self.run_hair_analysis(evidence_image, triage)
             recommendations = self.recommend_cuts(measurements, hair_analysis, limit=cut_limit)
             simulation = self.run_simulation(evidence_image, recommendations, simulation_output_path)
-            card = self.generate_card(evidence_image, recommendations, card_output_path) if card_output_path else None
+            sim_path = simulation.get("output_path") if simulation.get("available") else None
+            card = self.generate_card(evidence_image, recommendations, card_output_path, simulation_path=sim_path) if card_output_path else None
             limitations.extend(measurements.get("limitations", []))
             limitations.extend(hair_analysis.get("limitations", []))
             result = {"triage": triage, "evidence_image": evidence_image,
