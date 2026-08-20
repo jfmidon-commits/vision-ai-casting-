@@ -6,6 +6,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 from app.ai.image_triage.engine import ImageTriageEngine, TriageCategory, TriageResult
+from app.pipelines.visagism.artifacts import VisagismArtifactManifest
 from app.pipelines.visagism.card_generator import BarberCardGenerator
 from app.pipelines.visagism.cut_recommendations import CutRecommendationEngine
 from app.pipelines.visagism.grooming_hair_adapter import GroomingHairEvidenceAdapter
@@ -19,21 +20,14 @@ class RealVisagismPipeline:
     """Orchestrate deterministic visagism stages using Vision's real engines."""
 
     ESSENTIAL_VIEWS = (
-        TriageCategory.FRONTAL,
-        TriageCategory.THREE_QUARTER_LEFT,
-        TriageCategory.THREE_QUARTER_RIGHT,
-        TriageCategory.PROFILE_LEFT,
-        TriageCategory.PROFILE_RIGHT,
-        TriageCategory.HAIRLINE,
-        TriageCategory.POSTERIOR,
-        TriageCategory.HALF_BODY,
-        TriageCategory.SMILING,
+        TriageCategory.FRONTAL, TriageCategory.THREE_QUARTER_LEFT,
+        TriageCategory.THREE_QUARTER_RIGHT, TriageCategory.PROFILE_LEFT,
+        TriageCategory.PROFILE_RIGHT, TriageCategory.HAIRLINE,
+        TriageCategory.POSTERIOR, TriageCategory.HALF_BODY, TriageCategory.SMILING,
     )
     FACIAL_EVIDENCE_ORDER = (
-        TriageCategory.FRONTAL.value,
-        TriageCategory.HAIRLINE.value,
-        TriageCategory.THREE_QUARTER_RIGHT.value,
-        TriageCategory.THREE_QUARTER_LEFT.value,
+        TriageCategory.FRONTAL.value, TriageCategory.HAIRLINE.value,
+        TriageCategory.THREE_QUARTER_RIGHT.value, TriageCategory.THREE_QUARTER_LEFT.value,
     )
 
     def __init__(self, triage_engine: Optional[ImageTriageEngine] = None,
@@ -43,7 +37,8 @@ class RealVisagismPipeline:
                  cut_engine: Optional[CutRecommendationEngine] = None,
                  card_generator: Optional[BarberCardGenerator] = None,
                  simulation_provider: Optional[HairSimulationProvider] = None,
-                 report_builder: Optional[VisagismReportBuilder] = None) -> None:
+                 report_builder: Optional[VisagismReportBuilder] = None,
+                 artifact_manifest: Optional[VisagismArtifactManifest] = None) -> None:
         self.triage_engine = triage_engine or ImageTriageEngine()
         self.measurement_engine = measurement_engine or FacialMeasurementEngine(self.triage_engine)
         self.grooming_analyzer = grooming_analyzer or GroomingHairEvidenceAdapter()
@@ -52,6 +47,7 @@ class RealVisagismPipeline:
         self.card_generator = card_generator or BarberCardGenerator()
         self.simulation_provider = simulation_provider or NullHairSimulationProvider()
         self.report_builder = report_builder or VisagismReportBuilder()
+        self.artifact_manifest = artifact_manifest or VisagismArtifactManifest()
 
     def run_triage(self, dataset_path: str) -> Dict:
         results = self.triage_engine.process_dataset(dataset_path)
@@ -85,9 +81,7 @@ class RealVisagismPipeline:
     def generate_card(self, evidence_image: str, recommendations: Dict,
                       output_path: str) -> Optional[Dict]:
         primary = recommendations.get("primary")
-        if not isinstance(primary, dict):
-            return None
-        return self.card_generator.generate(evidence_image, primary, output_path)
+        return self.card_generator.generate(evidence_image, primary, output_path) if isinstance(primary, dict) else None
 
     def run_simulation(self, evidence_image: str, recommendations: Dict,
                        output_path: Optional[str] = None) -> Dict:
@@ -98,13 +92,16 @@ class RealVisagismPipeline:
         return self.simulation_provider.simulate(evidence_image, primary, output_path)
 
     def build_report(self, result: Dict) -> Dict:
-        """Return a stable report contract for API/artifact consumers."""
         return self.report_builder.build(result)
+
+    def write_artifact_manifest(self, result: Dict, output_path: str) -> Dict:
+        return self.artifact_manifest.write_json(result, output_path)
 
     def run(self, dataset_path: str, cut_limit: int = 5,
             card_output_path: Optional[str] = None,
             simulation_output_path: Optional[str] = None,
-            include_report: bool = False) -> Dict:
+            include_report: bool = False,
+            artifact_manifest_path: Optional[str] = None) -> Dict:
         triage = self.run_triage(dataset_path)
         evidence_image = self._select_facial_evidence_image(dataset_path, triage)
         limitations = list(triage.get("limitations", []))
@@ -115,23 +112,22 @@ class RealVisagismPipeline:
                       "simulation": {"available": False, "provider": self.simulation_provider.name,
                                      "reason": "no_suitable_facial_evidence_image"},
                       "card": None, "limitations": limitations}
-            if include_report:
-                result["report"] = self.build_report(result)
-            return result
-
-        measurements = self.run_measurements(evidence_image)
-        hair_analysis = self.run_hair_analysis(evidence_image, triage)
-        recommendations = self.recommend_cuts(measurements, hair_analysis, limit=cut_limit)
-        simulation = self.run_simulation(evidence_image, recommendations, simulation_output_path)
-        card = self.generate_card(evidence_image, recommendations, card_output_path) if card_output_path else None
-        limitations.extend(measurements.get("limitations", []))
-        limitations.extend(hair_analysis.get("limitations", []))
-        result = {"triage": triage, "evidence_image": evidence_image,
-                  "measurements": measurements, "hair_analysis": hair_analysis,
-                  "cut_recommendations": recommendations, "simulation": simulation,
-                  "card": card, "limitations": list(dict.fromkeys(limitations))}
+        else:
+            measurements = self.run_measurements(evidence_image)
+            hair_analysis = self.run_hair_analysis(evidence_image, triage)
+            recommendations = self.recommend_cuts(measurements, hair_analysis, limit=cut_limit)
+            simulation = self.run_simulation(evidence_image, recommendations, simulation_output_path)
+            card = self.generate_card(evidence_image, recommendations, card_output_path) if card_output_path else None
+            limitations.extend(measurements.get("limitations", []))
+            limitations.extend(hair_analysis.get("limitations", []))
+            result = {"triage": triage, "evidence_image": evidence_image,
+                      "measurements": measurements, "hair_analysis": hair_analysis,
+                      "cut_recommendations": recommendations, "simulation": simulation,
+                      "card": card, "limitations": list(dict.fromkeys(limitations))}
         if include_report:
             result["report"] = self.build_report(result)
+        if artifact_manifest_path:
+            result["artifact_manifest"] = self.write_artifact_manifest(result, artifact_manifest_path)
         return result
 
     def _select_facial_evidence_image(self, dataset_path: str,
