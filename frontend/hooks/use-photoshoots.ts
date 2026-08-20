@@ -47,13 +47,10 @@ export function useCreatePhotoshoot() {
 export function useUploadPhotos(photoshootId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ files, angle }: { files: File[]; angle: string }) => {
-      const results = [];
-      for (const file of files) {
-        results.push(await photoshootApi.uploadPhoto(photoshootId, file, angle));
-      }
-      return results;
-    },
+    mutationFn: ({ files, angle }: { files: File[]; angle: string }) =>
+      Promise.all(
+        files.map((file) => photoshootApi.uploadPhoto(photoshootId, file, angle))
+      ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["photoshoot", photoshootId] });
       queryClient.invalidateQueries({ queryKey: ["photoshoot-photos", photoshootId] });
