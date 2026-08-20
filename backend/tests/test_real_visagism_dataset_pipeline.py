@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 
@@ -20,6 +21,7 @@ def test_real_dataset_runs_through_reproducible_pipeline(
     tmp_path: Path,
 ):
     card_path = tmp_path / "barber_card.png"
+    manifest_path = tmp_path / "artifacts.json"
     pipeline = RealVisagismPipeline()
 
     result = pipeline.run(
@@ -27,6 +29,7 @@ def test_real_dataset_runs_through_reproducible_pipeline(
         cut_limit=5,
         card_output_path=str(card_path),
         include_report=True,
+        artifact_manifest_path=str(manifest_path),
     )
 
     assert result["triage"]["processed_images"] >= 10
@@ -34,7 +37,6 @@ def test_real_dataset_runs_through_reproducible_pipeline(
     assert os.path.exists(result["evidence_image"])
     assert len(result["cut_recommendations"]["options"]) == 5
     assert result["cut_recommendations"]["primary"] is not None
-
     assert result["simulation"]["available"] is False
     assert result["simulation"]["provider"] == "none"
 
@@ -48,3 +50,8 @@ def test_real_dataset_runs_through_reproducible_pipeline(
     assert result["report"]["evidence"]["processed_images"] >= 10
     assert result["report"]["integrity"]["physical_measurements_claimed"] is False
     assert result["report"]["integrity"]["synthetic_simulation_presented_as_real"] is False
+
+    assert manifest_path.exists()
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["artifacts"]["card"]["exists"] is True
+    assert len(manifest["artifacts"]["card"]["sha256"]) == 64
