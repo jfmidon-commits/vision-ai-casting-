@@ -15,6 +15,10 @@ from app.pipelines.visagism.card_generator import BarberCardGenerator
 from app.pipelines.visagism.cut_recommendations import CutRecommendationEngine
 from app.pipelines.visagism.hair_analysis import HairAnalysisEngine
 from app.pipelines.visagism.measurements import FacialMeasurementEngine
+from app.pipelines.visagism.simulation import (
+    HairSimulationProvider,
+    NullHairSimulationProvider,
+)
 
 
 class RealVisagismPipeline:
@@ -47,6 +51,7 @@ class RealVisagismPipeline:
         hair_engine: Optional[HairAnalysisEngine] = None,
         cut_engine: Optional[CutRecommendationEngine] = None,
         card_generator: Optional[BarberCardGenerator] = None,
+        simulation_provider: Optional[HairSimulationProvider] = None,
     ) -> None:
         self.triage_engine = triage_engine or ImageTriageEngine()
         self.measurement_engine = measurement_engine or FacialMeasurementEngine(
@@ -56,6 +61,7 @@ class RealVisagismPipeline:
         self.hair_engine = hair_engine or HairAnalysisEngine()
         self.cut_engine = cut_engine or CutRecommendationEngine()
         self.card_generator = card_generator or BarberCardGenerator()
+        self.simulation_provider = simulation_provider or NullHairSimulationProvider()
 
     def run_triage(self, dataset_path: str) -> Dict:
         """Process a real dataset and return evidence plus selected best views."""
@@ -132,11 +138,32 @@ class RealVisagismPipeline:
             output_path,
         )
 
+    def run_simulation(
+        self,
+        evidence_image: str,
+        recommendations: Dict,
+        output_path: Optional[str] = None,
+    ) -> Dict:
+        """Run an optional simulation provider without affecting real evidence."""
+        primary = recommendations.get("primary")
+        if not isinstance(primary, dict):
+            return {
+                "available": False,
+                "provider": self.simulation_provider.name,
+                "reason": "no_primary_recommendation",
+            }
+        return self.simulation_provider.simulate(
+            evidence_image,
+            primary,
+            output_path,
+        )
+
     def run(
         self,
         dataset_path: str,
         cut_limit: int = 5,
         card_output_path: Optional[str] = None,
+        simulation_output_path: Optional[str] = None,
     ) -> Dict:
         """Execute the implemented real pipeline end to end."""
         triage = self.run_triage(dataset_path)
@@ -150,6 +177,11 @@ class RealVisagismPipeline:
                 "measurements": {},
                 "hair_analysis": {},
                 "cut_recommendations": {"options": [], "primary": None},
+                "simulation": {
+                    "available": False,
+                    "provider": self.simulation_provider.name,
+                    "reason": "no_suitable_facial_evidence_image",
+                },
                 "card": None,
                 "limitations": limitations,
             }
@@ -160,6 +192,11 @@ class RealVisagismPipeline:
             measurements,
             hair_analysis,
             limit=cut_limit,
+        )
+        simulation = self.run_simulation(
+            evidence_image,
+            recommendations,
+            simulation_output_path,
         )
         card = None
         if card_output_path:
@@ -178,6 +215,7 @@ class RealVisagismPipeline:
             "measurements": measurements,
             "hair_analysis": hair_analysis,
             "cut_recommendations": recommendations,
+            "simulation": simulation,
             "card": card,
             "limitations": list(dict.fromkeys(limitations)),
         }
