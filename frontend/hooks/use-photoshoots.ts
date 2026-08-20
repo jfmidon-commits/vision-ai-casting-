@@ -47,10 +47,14 @@ export function useCreatePhotoshoot() {
 export function useUploadPhotos(photoshootId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ files, angle }: { files: File[]; angle: string }) =>
-      Promise.all(
+    mutationFn: async ({ files, angle }: { files: File[]; angle: string }) => {
+      const settled = await Promise.allSettled(
         files.map((file) => photoshootApi.uploadPhoto(photoshootId, file, angle))
-      ),
+      );
+      const uploaded = settled.filter((item) => item.status === "fulfilled").length;
+      const failed = settled.length - uploaded;
+      return { uploaded, failed, total: settled.length };
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["photoshoot", photoshootId] });
       queryClient.invalidateQueries({ queryKey: ["photoshoot-photos", photoshootId] });
