@@ -432,12 +432,11 @@ class ImageTriageEngine:
                 return TriageCategory.FRONTAL_CLOSE, 0.85, scores
             return TriageCategory.FRONTAL, 0.9, scores
 
-        # A true profile compresses the far eye much more than a 3/4 pose.
-        # Keep the conservative 48-degree threshold, but recover near-threshold
-        # right profiles when FaceMesh independently confirms strong eye
-        # foreshortening. This avoids turning the valid 3/4-right sample into a
-        # profile just by lowering the yaw cutoff again.
-        if yaw >= 48 or (yaw >= 42 and eye_compression <= 0.55):
+        # Treat moderately rotated faces as profiles only when FaceMesh also
+        # shows strong far-eye foreshortening. Very large yaw remains enough
+        # by itself. This preserves a true 3/4-right pose around the old 48°
+        # boundary while still recovering the real right-profile sample.
+        if yaw >= 55 or (yaw >= 42 and eye_compression <= 0.55):
             return TriageCategory.PROFILE_RIGHT, 0.78, scores
         if yaw <= -48:
             return TriageCategory.PROFILE_LEFT, 0.78, scores
