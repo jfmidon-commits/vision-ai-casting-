@@ -57,6 +57,17 @@ export const analysisApi = {
     api.post(`/api/v1/ai/analyze?photoshoot_id=${photoshootId}`, data),
 };
 
+export const visagismApi = {
+  analyze: (photoshootId: string, cutLimit = 5, generateCard = true) =>
+    api.post("/api/v1/ai/analyze/visagism/full", {
+      photoshoot_id: photoshootId,
+      cut_limit: cutLimit,
+      generate_card: generateCard,
+    }),
+  getResult: (analysisId: string) =>
+    api.get(`/api/v1/analyses/${analysisId}/visagism`),
+};
+
 export const reportApi = {
   list: (params?: any) => api.get("/api/v1/reports", { params }),
   get: (id: string) => api.get(`/api/v1/reports/${id}`),
