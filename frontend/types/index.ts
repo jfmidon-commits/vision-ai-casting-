@@ -73,6 +73,7 @@ export interface FullVisagismAnalysis {
   top_recommendation?: HaircutRecommendation;
   card_url?: string;
   manifest_url?: string;
+  simulation_url?: string;
   analysis_sources: string[];
   limitations: string[];
   integrity: Record<string, unknown>;
