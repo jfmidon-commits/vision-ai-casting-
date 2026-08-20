@@ -1,5 +1,6 @@
 """Reproducible visagism pipeline built on Vision's real analyzers."""
 
+from .artifacts import VisagismArtifactManifest
 from .card_generator import BarberCardGenerator
 from .cut_recommendations import CutRecommendationEngine
 from .hair_analysis import HairAnalysisEngine
@@ -17,5 +18,6 @@ __all__ = [
     "Measurement",
     "NullHairSimulationProvider",
     "RealVisagismPipeline",
+    "VisagismArtifactManifest",
     "VisagismReportBuilder",
 ]
