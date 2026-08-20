@@ -432,11 +432,13 @@ class ImageTriageEngine:
                 return TriageCategory.FRONTAL_CLOSE, 0.85, scores
             return TriageCategory.FRONTAL, 0.9, scores
 
-        # Treat moderately rotated faces as profiles only when FaceMesh also
-        # shows strong far-eye foreshortening. Very large yaw remains enough
-        # by itself. This preserves a true 3/4-right pose around the old 48°
-        # boundary while still recovering the real right-profile sample.
-        if yaw >= 55 or (yaw >= 42 and eye_compression <= 0.55):
+        # Reserve PROFILE_RIGHT for genuinely profile-like geometry. A face in
+        # the 3/4 range must also show clear far-eye foreshortening; yaw alone
+        # only wins when the rotation is truly extreme.
+        right_profile_extreme = yaw >= 70
+        right_profile_geometry = yaw >= 50 and eye_compression <= 0.60
+        right_profile_near = yaw >= 42 and eye_compression <= 0.42
+        if right_profile_extreme or right_profile_geometry or right_profile_near:
             return TriageCategory.PROFILE_RIGHT, 0.78, scores
         if yaw <= -48:
             return TriageCategory.PROFILE_LEFT, 0.78, scores
