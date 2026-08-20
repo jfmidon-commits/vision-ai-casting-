@@ -1,14 +1,15 @@
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, and_
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from sqlalchemy import and_, select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.database import get_db
+from app.models import Photoshoot, Photo, Analysis
+from app.schemas import AnalysisCreate, APIResponse, AnalysisProgress
+from app.schemas.visagism import FullVisagismRequest
 from app.middleware.auth import get_current_user
-from app.models import Analysis, Photo, Photoshoot
-from app.schemas import APIResponse, AnalysisCreate, FullVisagismRequest
 from app.services.ai_service import AIService
+from app.core.websocket import manager
 
 router = APIRouter(prefix="/api/v1/ai", tags=["ai"])
 
@@ -33,23 +34,11 @@ async def analyze_photoshoot(
     if not photoshoot:
         raise HTTPException(status_code=404, detail="Photoshoot not found")
 
-    photo_result = await db.execute(
-        select(Photo).where(
-            and_(
-                Photo.photoshoot_id == photoshoot_id,
-                Photo.tenant_id == current_user.tenant_id,
-            )
-        )
-    )
-    photos = list(photo_result.scalars().all())
-    if not photos:
-        raise HTTPException(status_code=400, detail="Photoshoot has no photos")
-
     analysis = Analysis(
         tenant_id=current_user.tenant_id,
         photoshoot_id=photoshoot_id,
         profile_id=photoshoot.profile_id,
-        photo_id=photos[0].id,
+        photo_id=photoshoot.photos[0].id if photoshoot.photos else None,
         status="queued",
     )
     db.add(analysis)
@@ -102,8 +91,11 @@ async def analyze_visagism_full(
         )
     )
     photos = list(photo_result.scalars().all())
-    if not photos:
-        raise HTTPException(status_code=400, detail="Photoshoot has no photos")
+    if len(photos) < 3:
+        raise HTTPException(
+            status_code=400,
+            detail="At least 3 photos are required for full visagism analysis",
+        )
 
     analysis = Analysis(
         tenant_id=current_user.tenant_id,
@@ -151,7 +143,9 @@ async def analyze_facial(
     photo = result.scalar_one_or_none()
     if not photo:
         raise HTTPException(status_code=404, detail="Photo not found")
-    return APIResponse(data=await AIService.analyze_facial(photo))
+
+    result = await AIService.analyze_facial(photo)
+    return APIResponse(data=result)
 
 
 @router.post("/analyze/visagism", response_model=APIResponse)
@@ -168,7 +162,9 @@ async def analyze_visagism(
     photo = result.scalar_one_or_none()
     if not photo:
         raise HTTPException(status_code=404, detail="Photo not found")
-    return APIResponse(data=await AIService.analyze_visagism(photo))
+
+    result = await AIService.analyze_visagism(photo)
+    return APIResponse(data=result)
 
 
 @router.post("/analyze/casting", response_model=APIResponse)
@@ -185,4 +181,6 @@ async def analyze_casting(
     photo = result.scalar_one_or_none()
     if not photo:
         raise HTTPException(status_code=404, detail="Photo not found")
-    return APIResponse(data=await AIService.analyze_casting(photo))
+
+    result = await AIService.analyze_casting(photo)
+    return APIResponse(data=result)
