@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,18 +14,27 @@ export default function VisagismResultPage() {
   const router = useRouter();
   const analysisId = params.id;
   const { data, isLoading, isError } = useVisagismResult(analysisId);
+  const [cardFailed, setCardFailed] = useState(false);
+  const [shareMessage, setShareMessage] = useState<string | null>(null);
 
   const shareCard = async () => {
     if (!data?.card_url) return;
-    if (navigator.share) {
-      await navigator.share({
-        title: "Card de Visagismo Vision",
-        text: data.top_recommendation?.name || "Recomendação de corte",
-        url: data.card_url,
-      });
-      return;
+    setShareMessage(null);
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: "Card de Visagismo Vision",
+          text: data.top_recommendation?.name || "Recomendação de corte",
+          url: data.card_url,
+        });
+        setShareMessage("Card compartilhado.");
+        return;
+      }
+      await navigator.clipboard.writeText(data.card_url);
+      setShareMessage("Link do card copiado.");
+    } catch {
+      setShareMessage("Não foi possível compartilhar o card neste dispositivo.");
     }
-    await navigator.clipboard.writeText(data.card_url);
   };
 
   return (
@@ -56,7 +66,13 @@ export default function VisagismResultPage() {
           </Card>
         )}
 
-        {data && (
+        {data?.status === "failed" && (
+          <Card>
+            <CardContent className="py-10 text-center text-destructive">A análise falhou. Volte ao ensaio, confira as fotos e tente novamente.</CardContent>
+          </Card>
+        )}
+
+        {data && data.status !== "failed" && (
           <>
             <div className="grid gap-4 md:grid-cols-3">
               <Card>
@@ -121,7 +137,18 @@ export default function VisagismResultPage() {
               <Card>
                 <CardHeader><CardTitle>Card para o barbeiro</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
-                  <img src={data.card_url} alt="Card visual de visagismo para o barbeiro" className="mx-auto max-h-[720px] w-auto max-w-full rounded-lg border" />
+                  {!cardFailed ? (
+                    <img
+                      src={data.card_url}
+                      alt="Card visual de visagismo para o barbeiro"
+                      onError={() => setCardFailed(true)}
+                      className="mx-auto max-h-[720px] w-auto max-w-full rounded-lg border"
+                    />
+                  ) : (
+                    <div className="rounded-lg border p-6 text-center text-sm text-muted-foreground">
+                      O card foi gerado, mas não foi possível carregar a imagem agora. Use o botão abaixo para abrir o arquivo diretamente.
+                    </div>
+                  )}
                   <div className="flex flex-col gap-2 sm:flex-row">
                     <Button asChild>
                       <a href={data.card_url} target="_blank" rel="noreferrer">
@@ -132,6 +159,7 @@ export default function VisagismResultPage() {
                       <Share2 className="mr-2 h-4 w-4" /> Compartilhar
                     </Button>
                   </div>
+                  {shareMessage && <p className="text-sm text-muted-foreground">{shareMessage}</p>}
                 </CardContent>
               </Card>
             )}
