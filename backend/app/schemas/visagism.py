@@ -50,6 +50,7 @@ class FullVisagismAnalysis(BaseModel):
     top_recommendation: Optional[HaircutRecommendation] = None
     card_url: Optional[str] = None
     manifest_url: Optional[str] = None
+    simulation_url: Optional[str] = None
     analysis_sources: List[str] = []
     limitations: List[str] = []
     integrity: Dict[str, Any] = {}

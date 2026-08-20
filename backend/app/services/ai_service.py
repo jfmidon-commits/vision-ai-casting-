@@ -21,6 +21,10 @@ from app.ai.photogenic.analyzer import PhotogenicAnalyzer
 from app.ai.preprocessing.preprocessor import ImagePreprocessor
 from app.ai.visagism.analyzer import VisagismAnalyzer
 from app.pipelines.visagism import RealVisagismPipeline
+from app.pipelines.visagism.simulation import (
+    NullHairSimulationProvider,
+    OpenAIHairSimulationProvider,
+)
 from app.services.storage_service import StorageService
 
 
@@ -158,7 +162,14 @@ class AIService:
                         else None
                     )
                     manifest_path = os.path.join(temp_dir, "artifacts.json")
-                    pipeline = RealVisagismPipeline()
+                    # Inject simulation provider based on API key availability
+                    api_key = os.environ.get("OPENAI_API_KEY", "")
+                    sim_provider = (
+                        OpenAIHairSimulationProvider(api_key=api_key)
+                        if api_key
+                        else NullHairSimulationProvider()
+                    )
+                    pipeline = RealVisagismPipeline(simulation_provider=sim_provider)
                     runner = partial(
                         pipeline.run,
                         dataset_path,
@@ -185,12 +196,24 @@ class AIService:
                             "application/json",
                         )
 
+                    # Upload simulation image if generated and validated
+                    simulation_url = None
+                    simulation_result = pipeline_result.get("simulation", {})
+                    if simulation_result.get("available"):
+                        sim_path = simulation_result.get("output_path")
+                        if sim_path and os.path.isfile(sim_path):
+                            sim_key = f"visagism/{analysis_id}/simulation.png"
+                            simulation_url = await StorageService.upload_bytes(
+                                Path(sim_path).read_bytes(), sim_key, "image/png"
+                            )
+
                     public_result = cls._build_full_visagism_payload(
                         analysis_id,
                         photoshoot_id,
                         pipeline_result,
                         card_url,
                         manifest_url,
+                        simulation_url,
                     )
 
                 analysis.visagism = public_result
@@ -244,6 +267,7 @@ class AIService:
         pipeline_result: Dict,
         card_url: str | None,
         manifest_url: str | None,
+        simulation_url: str | None = None,
     ) -> Dict:
         report = pipeline_result.get("report", {})
         recommendations = report.get("recommendations", {})
@@ -272,6 +296,7 @@ class AIService:
             "analysis_sources": evidence.get("sources", []),
             "limitations": report.get("limitations", []),
             "integrity": report.get("integrity", {}),
+            "simulation_url": simulation_url,
         }
 
     @staticmethod
