@@ -107,6 +107,39 @@ export default function VisagismResultPage() {
 
             {data.card_url && <Card><CardHeader><CardTitle>Card para o barbeiro</CardTitle></CardHeader><CardContent className="space-y-4">{!cardFailed ? <img src={data.card_url} alt="Card visual de visagismo para o barbeiro" onError={() => setCardFailed(true)} className="mx-auto max-h-[720px] w-auto max-w-full rounded-lg border" /> : <div className="rounded-lg border p-6 text-center text-sm text-muted-foreground">O card foi gerado, mas não foi possível carregar a imagem agora. Use o botão abaixo para abrir o arquivo diretamente.</div>}<div className="flex flex-col gap-2 sm:flex-row"><Button asChild><a href={data.card_url} target="_blank" rel="noreferrer"><Download className="mr-2 h-4 w-4" /> Abrir / baixar card</a></Button><Button variant="outline" onClick={shareCard}><Share2 className="mr-2 h-4 w-4" /> Compartilhar</Button></div>{shareMessage && <p className="text-sm text-muted-foreground">{shareMessage}</p>}</CardContent></Card>}
 
+            {data.simulation_url && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Simulação do corte</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-2">Antes</p>
+                      <img
+                        src={data.selected_views?.frontal?.url || data.selected_views?.frontal?.filename || ""}
+                        alt="Foto original"
+                        className="rounded-lg border w-full aspect-[3/4] object-cover"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-2">Depois (simulação)</p>
+                      <img
+                        src={data.simulation_url}
+                        alt="Simulação do corte recomendado"
+                        className="rounded-lg border w-full aspect-[3/4] object-cover"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Simulação gerada por IA. Resultado pode variar. Sempre consulte um profissional.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+
             {data.limitations.length > 0 && <Card><CardHeader><CardTitle className="text-base">Limitações da análise</CardTitle></CardHeader><CardContent><ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">{data.limitations.map((item) => <li key={item}>{item}</li>)}</ul></CardContent></Card>}
             <Button variant="outline" onClick={() => router.push("/photoshoots")}>Voltar aos ensaios</Button>
           </>
