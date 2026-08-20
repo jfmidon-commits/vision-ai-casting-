@@ -13,3 +13,10 @@ from .schemas import (
     AnalysisProgress, AnalysisComplete,
     ErrorResponse
 )
+from .visagism import FullVisagismAnalysis, FullVisagismRequest, HaircutRecommendation
+
+__all__ = [
+    "FullVisagismAnalysis",
+    "FullVisagismRequest",
+    "HaircutRecommendation",
+]
