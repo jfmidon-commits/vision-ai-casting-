@@ -1,10 +1,12 @@
 """Reproducible visagism pipeline built on Vision's real analyzers."""
 
+from .cut_recommendations import CutRecommendationEngine
 from .hair_analysis import HairAnalysisEngine
 from .measurements import FacialMeasurementEngine, Measurement
 from .pipeline import RealVisagismPipeline
 
 __all__ = [
+    "CutRecommendationEngine",
     "FacialMeasurementEngine",
     "HairAnalysisEngine",
     "Measurement",
