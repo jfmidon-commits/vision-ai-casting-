@@ -5,6 +5,7 @@ from .cut_recommendations import CutRecommendationEngine
 from .hair_analysis import HairAnalysisEngine
 from .measurements import FacialMeasurementEngine, Measurement
 from .pipeline import RealVisagismPipeline
+from .report import VisagismReportBuilder
 from .simulation import HairSimulationProvider, NullHairSimulationProvider
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "Measurement",
     "NullHairSimulationProvider",
     "RealVisagismPipeline",
+    "VisagismReportBuilder",
 ]
