@@ -432,13 +432,10 @@ class ImageTriageEngine:
                 return TriageCategory.FRONTAL_CLOSE, 0.85, scores
             return TriageCategory.FRONTAL, 0.9, scores
 
-        # Reserve PROFILE_RIGHT for genuinely profile-like geometry. A face in
-        # the 3/4 range must also show clear far-eye foreshortening; yaw alone
-        # only wins when the rotation is truly extreme.
-        right_profile_extreme = yaw >= 70
-        right_profile_geometry = yaw >= 50 and eye_compression <= 0.60
-        right_profile_near = yaw >= 42 and eye_compression <= 0.42
-        if right_profile_extreme or right_profile_geometry or right_profile_near:
+        # Keep single-image classification conservative. Dataset-level triage
+        # below can compare multiple right-facing samples and promote the one
+        # with the strongest profile evidence without sacrificing 3/4 poses.
+        if yaw >= 72 or (yaw >= 58 and eye_compression <= 0.48):
             return TriageCategory.PROFILE_RIGHT, 0.78, scores
         if yaw <= -48:
             return TriageCategory.PROFILE_LEFT, 0.78, scores
@@ -523,6 +520,31 @@ class ImageTriageEngine:
             if os.path.splitext(filename)[1].lower() not in valid_extensions:
                 continue
             results.append(self.process_image(os.path.join(dataset_path, filename)))
+
+        # Dataset-level disambiguation for right-facing captures. When no
+        # right profile was found but there are at least two right-facing
+        # 3/4 candidates, promote only the sample with the strongest profile
+        # evidence. This uses FaceMesh geometry, not filenames or labels.
+        has_profile_right = any(
+            result.category == TriageCategory.PROFILE_RIGHT for result in results
+        )
+        right_candidates = [
+            result
+            for result in results
+            if result.category == TriageCategory.THREE_QUARTER_RIGHT
+            and result.scores.get("yaw", 0.0) > 0
+        ]
+        if not has_profile_right and len(right_candidates) >= 2:
+            profile_candidate = max(
+                right_candidates,
+                key=lambda result: (
+                    result.scores.get("yaw", 0.0),
+                    -result.scores.get("eye_compression", 1.0),
+                ),
+            )
+            profile_candidate.category = TriageCategory.PROFILE_RIGHT
+            profile_candidate.confidence = max(profile_candidate.confidence, 0.78)
+
         return results
 
     def select_best_by_category(
