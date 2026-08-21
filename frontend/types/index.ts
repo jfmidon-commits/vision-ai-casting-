@@ -41,6 +41,17 @@ export interface Photo {
   analysis_status: string;
 }
 
+export interface VisagismCardMedia {
+  personPhoto: string;
+  displayImage: string;
+  realPhotoVerified: boolean;
+  realPhotoRefs: string[];
+  simulationApplied: boolean;
+  identityVerified: boolean;
+  fallbackUsed?: boolean;
+  displayMode?: 'original' | 'validated_hair_beard_overlay';
+}
+
 export interface Analysis {
   id: string;
   status: string;
@@ -48,6 +59,7 @@ export interface Analysis {
   facial_structure?: any;
   visagism?: any;
   casting?: any;
+  card_media?: VisagismCardMedia;
   created_at: string;
 }
 
