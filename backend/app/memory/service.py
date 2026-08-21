@@ -1,96 +1,147 @@
 """
-MemoryService - Camada de Memória Persistente do Vision Ecosystem.
+MemoryService - camada de memória persistente do Vision Ecosystem.
 
-Responsável por:
-- Armazenar preferências do usuário no banco de dados
-- Manter histórico de decisões
-- Registrar feedbacks
-- Consultar memória para agentes
-- Cache inteligente com TTL
+O serviço suporta dois modos por compatibilidade:
+1. Persistente: recebe AsyncSession (posicional ou via ``db=``) e usa PostgreSQL.
+2. Local/legado: quando nenhuma sessão é fornecida, mantém a memória na instância.
+
+O modo local existe para consumidores leves e testes antigos sem enfraquecer o
+contrato persistente usado pela aplicação.
 """
 
-from typing import Dict, List, Any, Optional
-from uuid import UUID
 from datetime import datetime, timedelta
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, desc
-from sqlalchemy.dialects.postgresql import insert
+from typing import Any, Dict, List, Optional, Tuple
+from uuid import UUID, uuid4
 
-from app.models import UserMemory, UserFeedback, MemoryCategory
+from sqlalchemy import and_, desc, or_, select
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models import UserFeedback, UserMemory
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 
 class MemoryService:
-    """
-    Camada de Memória Persistente do Vision Ecosystem.
-    Armazena memórias de usuários no PostgreSQL com cache em memória.
-    """
+    """Memória de usuário com backend PostgreSQL e fallback local compatível."""
 
     def __init__(self, db: Optional[AsyncSession] = None):
         self._db = db
-        # Cache em memória para acesso rápido (TTL: 5 minutos)
-        self._cache: Dict[str, Dict[str, Any]] = {}
+        self._cache: Dict[str, Any] = {}
         self._cache_ttl: Dict[str, datetime] = {}
         self._cache_duration = timedelta(minutes=5)
+        self._local_memory: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        self._local_feedback: List[Dict[str, Any]] = []
+
+    @staticmethod
+    def _looks_like_db(value: Any) -> bool:
+        return value is not None and callable(getattr(value, "execute", None))
 
     def _cache_key(self, user_id: UUID, key: str, category: str) -> str:
-        """Gera chave de cache."""
         return f"{user_id}:{category}:{key}"
 
     def _get_from_cache(self, cache_key: str) -> Optional[Any]:
-        """Recupera valor do cache se válido."""
-        if cache_key in self._cache:
-            if datetime.utcnow() < self._cache_ttl.get(cache_key, datetime.min):
-                return self._cache[cache_key]
-            # Expirado, remover
-            del self._cache[cache_key]
-            del self._cache_ttl[cache_key]
-        return None
+        if cache_key not in self._cache:
+            return None
+        if datetime.utcnow() >= self._cache_ttl.get(cache_key, datetime.min):
+            self._cache.pop(cache_key, None)
+            self._cache_ttl.pop(cache_key, None)
+            return None
+        return self._cache[cache_key]
 
     def _set_cache(self, cache_key: str, value: Any) -> None:
-        """Armazena valor no cache com TTL."""
         self._cache[cache_key] = value
         self._cache_ttl[cache_key] = datetime.utcnow() + self._cache_duration
 
     def _invalidate_cache(self, user_id: UUID) -> None:
-        """Invalida todo o cache de um usuário."""
         prefix = f"{user_id}:"
-        keys_to_remove = [k for k in self._cache if k.startswith(prefix)]
-        for k in keys_to_remove:
-            del self._cache[k]
-            if k in self._cache_ttl:
-                del self._cache_ttl[k]
+        for cache_key in [k for k in self._cache if k.startswith(prefix)]:
+            self._cache.pop(cache_key, None)
+            self._cache_ttl.pop(cache_key, None)
 
-    async def store(
+    def _put_local(
         self,
-        db: AsyncSession,
         user_id: UUID,
         key: str,
         value: Any,
+        category: str,
+        ttl_days: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        expires_at = (
+            datetime.utcnow() + timedelta(days=ttl_days) if ttl_days else None
+        )
+        user_bucket = self._local_memory.setdefault(str(user_id), {})
+        category_bucket = user_bucket.setdefault(category, {})
+        record = {
+            "key": key,
+            "value": value,
+            "category": category,
+            "expires_at": expires_at,
+            "updated_at": datetime.utcnow(),
+        }
+        category_bucket[key] = record
+        self._set_cache(self._cache_key(user_id, key, category), value)
+        return record
+
+    def _get_local(self, user_id: UUID, key: str, category: str) -> Optional[Any]:
+        record = (
+            self._local_memory.get(str(user_id), {})
+            .get(category, {})
+            .get(key)
+        )
+        if not record:
+            return None
+        expires_at = record.get("expires_at")
+        if expires_at and datetime.utcnow() >= expires_at:
+            self._local_memory[str(user_id)][category].pop(key, None)
+            return None
+        return record["value"]
+
+    @staticmethod
+    def _parse_store_args(
+        args: Tuple[Any, ...],
+        db: Optional[AsyncSession],
+        user_id: Optional[UUID],
+        key: Optional[str],
+        value: Any,
+        category: str,
+    ) -> Tuple[Optional[AsyncSession], UUID, str, Any, str]:
+        values = list(args)
+        if values and MemoryService._looks_like_db(values[0]):
+            db = values.pop(0)
+        if user_id is None and values:
+            user_id = values.pop(0)
+        if key is None and values:
+            key = values.pop(0)
+        if value is None and values:
+            value = values.pop(0)
+        if values:
+            category = values.pop(0)
+        if user_id is None or key is None:
+            raise TypeError("store requer user_id e key")
+        return db, user_id, key, value, category
+
+    async def store(
+        self,
+        *args: Any,
+        db: Optional[AsyncSession] = None,
+        user_id: Optional[UUID] = None,
+        key: Optional[str] = None,
+        value: Any = None,
         category: str = "general",
         ttl_days: Optional[int] = None,
-    ) -> UserMemory:
-        """
-        Armazena um valor na memória persistente do usuário.
+    ) -> Any:
+        """Armazena memória usando PostgreSQL ou o modo local compatível."""
+        db, user_id, key, value, category = self._parse_store_args(
+            args, db, user_id, key, value, category
+        )
+        db = db or self._db
 
-        Args:
-            db: Sessão do banco de dados
-            user_id: ID do usuário
-            key: Chave da memória
-            value: Valor a ser armazenado (serializável em JSON)
-            category: Categoria da memória
-            ttl_days: Dias até expiração (None = sem expiração)
+        if not self._looks_like_db(db):
+            return self._put_local(user_id, key, value, category, ttl_days)
 
-        Returns:
-            UserMemory: Registro criado/atualizado
-        """
-        expires_at = None
-        if ttl_days:
-            expires_at = datetime.utcnow() + timedelta(days=ttl_days)
-
-        # Upsert: atualiza se existe, cria se não
+        expires_at = datetime.utcnow() + timedelta(days=ttl_days) if ttl_days else None
         stmt = (
             insert(UserMemory)
             .values(
@@ -112,17 +163,9 @@ class MemoryService:
                 },
             )
         )
-
         await db.execute(stmt)
         await db.commit()
-
-        # Atualizar cache
-        cache_key = self._cache_key(user_id, key, category)
-        self._set_cache(cache_key, value)
-
-        logger.info(f"Memory stored for user {user_id}: {key} (category: {category})")
-
-        # Retornar o registro
+        self._set_cache(self._cache_key(user_id, key, category), value)
         result = await db.execute(
             select(UserMemory).where(
                 and_(UserMemory.user_id == user_id, UserMemory.memory_key == key)
@@ -132,32 +175,37 @@ class MemoryService:
 
     async def retrieve(
         self,
-        db: AsyncSession,
-        user_id: UUID,
-        key: str,
+        *args: Any,
+        db: Optional[AsyncSession] = None,
+        user_id: Optional[UUID] = None,
+        key: Optional[str] = None,
         category: str = "general",
     ) -> Optional[Any]:
-        """
-        Recupera um valor da memória do usuário.
+        """Recupera memória nos dois formatos de chamada suportados."""
+        values = list(args)
+        if values and self._looks_like_db(values[0]):
+            db = values.pop(0)
+        if user_id is None and values:
+            user_id = values.pop(0)
+        if key is None and values:
+            key = values.pop(0)
+        if values:
+            category = values.pop(0)
+        if user_id is None or key is None:
+            raise TypeError("retrieve requer user_id e key")
 
-        Args:
-            db: Sessão do banco de dados
-            user_id: ID do usuário
-            key: Chave da memória
-            category: Categoria da memória
-
-        Returns:
-            Valor armazenado ou None
-        """
         cache_key = self._cache_key(user_id, key, category)
-
-        # Tentar cache primeiro
         cached = self._get_from_cache(cache_key)
         if cached is not None:
-            logger.debug(f"Memory cache hit for user {user_id}: {key}")
             return cached
 
-        # Buscar no banco
+        db = db or self._db
+        if not self._looks_like_db(db):
+            value = self._get_local(user_id, key, category)
+            if value is not None:
+                self._set_cache(cache_key, value)
+            return value
+
         result = await db.execute(
             select(UserMemory).where(
                 and_(
@@ -171,38 +219,48 @@ class MemoryService:
             )
         )
         memory = result.scalar_one_or_none()
-
-        if memory:
-            # Atualizar contador de acesso
-            memory.access_count += 1
-            memory.last_accessed_at = datetime.utcnow()
-            await db.commit()
-
-            # Atualizar cache
-            self._set_cache(cache_key, memory.value)
-            return memory.value
-
-        return None
+        if not memory:
+            return None
+        memory.access_count += 1
+        memory.last_accessed_at = datetime.utcnow()
+        await db.commit()
+        self._set_cache(cache_key, memory.value)
+        return memory.value
 
     async def get_user_memory(
         self,
-        db: AsyncSession,
-        user_id: UUID,
+        *args: Any,
+        db: Optional[AsyncSession] = None,
+        user_id: Optional[UUID] = None,
         category: Optional[str] = None,
         limit: int = 100,
     ) -> Dict[str, Any]:
-        """
-        Retorna toda a memória ativa de um usuário.
+        """Lista memória; no modo legado também expõe categorias no topo."""
+        values = list(args)
+        if values and self._looks_like_db(values[0]):
+            db = values.pop(0)
+        if user_id is None and values:
+            user_id = values.pop(0)
+        if values and category is None:
+            category = values.pop(0)
+        if user_id is None:
+            raise TypeError("get_user_memory requer user_id")
 
-        Args:
-            db: Sessão do banco de dados
-            user_id: ID do usuário
-            category: Filtrar por categoria (None = todas)
-            limit: Limite de registros
+        db = db or self._db
+        if not self._looks_like_db(db):
+            source = self._local_memory.get(str(user_id), {})
+            result: Dict[str, Any] = {}
+            categories = [category] if category else list(source.keys())
+            for cat in categories:
+                entries = source.get(cat, {})
+                result[cat] = {
+                    key: record["value"]
+                    for key, record in entries.items()
+                    if not record.get("expires_at")
+                    or datetime.utcnow() < record["expires_at"]
+                }
+            return result
 
-        Returns:
-            Dict com todas as memórias do usuário
-        """
         query = select(UserMemory).where(
             and_(
                 UserMemory.user_id == user_id,
@@ -212,15 +270,11 @@ class MemoryService:
                 ),
             )
         )
-
         if category:
             query = query.where(UserMemory.category == category)
-
         query = query.order_by(desc(UserMemory.updated_at)).limit(limit)
-
         result = await db.execute(query)
         memories = result.scalars().all()
-
         return {
             "memories": [
                 {
@@ -240,68 +294,95 @@ class MemoryService:
 
     async def delete_memory(
         self,
-        db: AsyncSession,
-        user_id: UUID,
-        key: str,
+        *args: Any,
+        db: Optional[AsyncSession] = None,
+        user_id: Optional[UUID] = None,
+        key: Optional[str] = None,
+        category: str = "general",
     ) -> bool:
-        """
-        Remove uma memória específica.
+        values = list(args)
+        if values and self._looks_like_db(values[0]):
+            db = values.pop(0)
+        if user_id is None and values:
+            user_id = values.pop(0)
+        if key is None and values:
+            key = values.pop(0)
+        if user_id is None or key is None:
+            raise TypeError("delete_memory requer user_id e key")
 
-        Args:
-            db: Sessão do banco de dados
-            user_id: ID do usuário
-            key: Chave da memória
+        db = db or self._db
+        if not self._looks_like_db(db):
+            user_bucket = self._local_memory.get(str(user_id), {})
+            removed = False
+            for cat, entries in user_bucket.items():
+                if key in entries and (category == "general" or cat == category):
+                    entries.pop(key, None)
+                    removed = True
+            self._invalidate_cache(user_id)
+            return removed
 
-        Returns:
-            True se removido, False se não encontrado
-        """
         result = await db.execute(
             select(UserMemory).where(
                 and_(UserMemory.user_id == user_id, UserMemory.memory_key == key)
             )
         )
         memory = result.scalar_one_or_none()
-
-        if memory:
-            await db.delete(memory)
-            await db.commit()
-
-            # Invalidar cache
-            cache_key = self._cache_key(user_id, key, memory.category)
-            if cache_key in self._cache:
-                del self._cache[cache_key]
-                del self._cache_ttl[cache_key]
-
-            logger.info(f"Memory deleted for user {user_id}: {key}")
-            return True
-
-        return False
+        if not memory:
+            return False
+        await db.delete(memory)
+        await db.commit()
+        self._invalidate_cache(user_id)
+        return True
 
     async def add_feedback(
         self,
-        db: AsyncSession,
-        user_id: UUID,
-        item_type: str,
-        item_id: str,
-        feedback: str,
+        *args: Any,
+        db: Optional[AsyncSession] = None,
+        user_id: Optional[UUID] = None,
+        item_type: Optional[str] = None,
+        item_id: Optional[str] = None,
+        feedback: Optional[str] = None,
         rating: Optional[int] = None,
-        metadata: Optional[Dict] = None,
-    ) -> UserFeedback:
-        """
-        Adiciona feedback do usuário sobre um item.
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Any:
+        """Registra feedback com ou sem sessão persistente."""
+        values = list(args)
+        if values and self._looks_like_db(values[0]):
+            db = values.pop(0)
+        for name in ("user_id", "item_type", "item_id", "feedback"):
+            if not values:
+                break
+            if name == "user_id" and user_id is None:
+                user_id = values.pop(0)
+            elif name == "item_type" and item_type is None:
+                item_type = values.pop(0)
+            elif name == "item_id" and item_id is None:
+                item_id = values.pop(0)
+            elif name == "feedback" and feedback is None:
+                feedback = values.pop(0)
+        if user_id is None or item_type is None or item_id is None or feedback is None:
+            raise TypeError("add_feedback requer user_id, item_type, item_id e feedback")
 
-        Args:
-            db: Sessão do banco de dados
-            user_id: ID do usuário
-            item_type: Tipo do item (analysis, report, casting, etc.)
-            item_id: ID do item
-            feedback: Texto do feedback
-            rating: Nota de 1 a 5
-            metadata: Metadados adicionais
+        payload = {
+            "feedback": feedback,
+            "rating": rating,
+            "item_type": item_type,
+            "item_id": item_id,
+            "metadata": metadata or {},
+        }
+        db = db or self._db
+        if not self._looks_like_db(db):
+            feedback_id = str(uuid4())
+            payload["feedback_id"] = feedback_id
+            self._local_feedback.append({"user_id": str(user_id), **payload})
+            self._put_local(
+                user_id,
+                f"feedback_{item_type}_{item_id}",
+                payload,
+                "feedback",
+            )
+            return payload
 
-        Returns:
-            UserFeedback: Registro criado
-        """
         feedback_record = UserFeedback(
             user_id=user_id,
             item_type=item_type,
@@ -310,27 +391,17 @@ class MemoryService:
             rating=rating,
             metadata=metadata or {},
         )
-
         db.add(feedback_record)
         await db.commit()
         await db.refresh(feedback_record)
-
-        # Também armazenar na memória geral para fácil consulta
+        payload["feedback_id"] = str(feedback_record.id)
         await self.store(
             db=db,
             user_id=user_id,
             key=f"feedback_{item_type}_{item_id}",
-            value={
-                "feedback": feedback,
-                "rating": rating,
-                "item_type": item_type,
-                "item_id": item_id,
-                "feedback_id": str(feedback_record.id),
-            },
+            value=payload,
             category="feedback",
         )
-
-        logger.info(f"Feedback added for user {user_id} on {item_type}:{item_id}")
         return feedback_record
 
     async def get_feedback(
@@ -341,31 +412,14 @@ class MemoryService:
         item_id: Optional[str] = None,
         limit: int = 50,
     ) -> List[Dict[str, Any]]:
-        """
-        Recupera feedbacks do usuário.
-
-        Args:
-            db: Sessão do banco de dados
-            user_id: ID do usuário
-            item_type: Filtrar por tipo de item
-            item_id: Filtrar por ID específico
-            limit: Limite de resultados
-
-        Returns:
-            Lista de feedbacks
-        """
         query = select(UserFeedback).where(UserFeedback.user_id == user_id)
-
         if item_type:
             query = query.where(UserFeedback.item_type == item_type)
         if item_id:
             query = query.where(UserFeedback.item_id == item_id)
-
         query = query.order_by(desc(UserFeedback.created_at)).limit(limit)
-
         result = await db.execute(query)
         feedbacks = result.scalars().all()
-
         return [
             {
                 "id": str(f.id),
@@ -380,29 +434,10 @@ class MemoryService:
         ]
 
     async def get_preferences(
-        self,
-        db: AsyncSession,
-        user_id: UUID,
+        self, db: AsyncSession, user_id: UUID
     ) -> Dict[str, Any]:
-        """
-        Recupera preferências consolidadas do usuário.
-
-        Args:
-            db: Sessão do banco de dados
-            user_id: ID do usuário
-
-        Returns:
-            Dict com preferências do usuário
-        """
-        # Buscar todas as memórias da categoria 'preferences'
         prefs = await self.get_user_memory(db, user_id, category="preferences")
-
-        # Consolidar em um dict plano
-        consolidated = {}
-        for mem in prefs.get("memories", []):
-            consolidated[mem["key"]] = mem["value"]
-
-        return consolidated
+        return {m["key"]: m["value"] for m in prefs.get("memories", [])}
 
     async def set_preference(
         self,
@@ -411,18 +446,6 @@ class MemoryService:
         preference_key: str,
         value: Any,
     ) -> UserMemory:
-        """
-        Define uma preferência do usuário.
-
-        Args:
-            db: Sessão do banco de dados
-            user_id: ID do usuário
-            preference_key: Chave da preferência
-            value: Valor da preferência
-
-        Returns:
-            UserMemory: Registro criado/atualizado
-        """
         return await self.store(
             db=db,
             user_id=user_id,
@@ -432,15 +455,6 @@ class MemoryService:
         )
 
     async def cleanup_expired(self, db: AsyncSession) -> int:
-        """
-        Remove memórias expiradas.
-
-        Args:
-            db: Sessão do banco de dados
-
-        Returns:
-            Número de registros removidos
-        """
         result = await db.execute(
             select(UserMemory).where(
                 and_(
@@ -450,11 +464,7 @@ class MemoryService:
             )
         )
         expired = result.scalars().all()
-
-        count = len(expired)
-        for mem in expired:
-            await db.delete(mem)
-
+        for memory in expired:
+            await db.delete(memory)
         await db.commit()
-        logger.info(f"Cleaned up {count} expired memories")
-        return count
+        return len(expired)
