@@ -11,12 +11,12 @@ on:
 
   push:
     paths:
+      - 'backend/app/pipelines/visagism/**'
       - 'backend/app/ai/visagism/**'
       - 'backend/app/ai/image_triage/**'
       - 'backend/app/ai/mediapipe/**'
-      - 'backend/tests/fixtures/visagism/**'
       - 'assets/reference_photos/juliano_midon/visagismo_2026-08-21/**'
-      - 'backend/tests/test_visagism_benchmark.py'
+      - 'backend/tests/test_current_visagism_dataset_pipeline.py'
       - '.github/workflows/visagism-benchmark.yml'
 
 env:
@@ -54,37 +54,25 @@ jobs:
           python -c "from PIL import Image; print('Pillow OK')"
           python -c "import numpy as np; print(f'NumPy: {np.__version__}')"
 
-      - name: Check dataset
+      - name: Check current dataset
         id: check_dataset
         run: |
           DATASET_PATH="${{ github.event.inputs.dataset_path || 'assets/reference_photos/juliano_midon/visagismo_2026-08-21' }}"
-          echo "dataset_path=$DATASET_PATH" >> $GITHUB_OUTPUT
-          if [ -d "$DATASET_PATH" ] && [ "$(find "$DATASET_PATH" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' \) | wc -l)" -gt 0 ]; then
-            echo "has_images=true" >> $GITHUB_OUTPUT
-          else
-            echo "has_images=false" >> $GITHUB_OUTPUT
-            echo "Dataset sem imagens: $DATASET_PATH"
+          echo "dataset_path=$DATASET_PATH" >> "$GITHUB_OUTPUT"
+          COUNT=$(find "$DATASET_PATH" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) | wc -l)
+          echo "image_count=$COUNT" >> "$GITHUB_OUTPUT"
+          if [ ! -d "$DATASET_PATH" ] || [ "$COUNT" -lt 3 ]; then
+            echo "Dataset insuficiente: $DATASET_PATH ($COUNT imagens)"
             exit 1
           fi
 
-      - name: Stage current dataset for benchmark
-        run: |
-          DATASET_PATH="${{ steps.check_dataset.outputs.dataset_path }}"
-          TARGET="backend/tests/fixtures/visagism/dataset_001"
-          if [ "$DATASET_PATH" != "$TARGET" ]; then
-            mkdir -p "$TARGET"
-            find "$TARGET" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' \) -delete
-            find "$DATASET_PATH" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' \) -exec cp {} "$TARGET"/ \;
-          fi
-          echo "Staged $(find "$TARGET" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' \) | wc -l) images"
-
-      - name: Run benchmark tests
+      - name: Run current-session visagism pipeline
         id: benchmark
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-test-mock' }}
+          CURRENT_VISAGISM_DATASET: ${{ github.workspace }}/${{ steps.check_dataset.outputs.dataset_path }}
         run: |
           cd backend
-          python -m pytest tests/test_visagism_benchmark.py -v --tb=short
+          python -m pytest tests/test_current_visagism_dataset_pipeline.py -v --tb=short
 
       - name: Upload artifacts
         if: always()
@@ -100,9 +88,9 @@ jobs:
         if: always()
         run: |
           echo "=========================================="
-          echo "  VISAGISM BENCHMARK COMPLETE"
+          echo "  CURRENT VISAGISM PIPELINE COMPLETE"
           echo "=========================================="
           echo "Dataset: ${{ steps.check_dataset.outputs.dataset_path }}"
-          echo "Images: ${{ steps.check_dataset.outputs.has_images }}"
+          echo "Images: ${{ steps.check_dataset.outputs.image_count }}"
           echo "Artifact: visagism-benchmark-2026-08-21"
           echo "=========================================="
