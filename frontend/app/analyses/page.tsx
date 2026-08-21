@@ -4,11 +4,14 @@ import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { IdentityLockedVisagismCard } from "@/components/visagism/identity-locked-visagism-card";
 import { useAnalyses } from "@/hooks/use-analyses";
-import { Brain, Clock, CheckCircle, AlertCircle, Play } from "lucide-react";
+import { Brain, Clock, CheckCircle, AlertCircle } from "lucide-react";
+import { useState } from "react";
 
 export default function AnalysesPage() {
   const { data: analyses, isLoading } = useAnalyses();
+  const [selectedAnalysis, setSelectedAnalysis] = useState<any | null>(null);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -82,6 +85,23 @@ export default function AnalysesPage() {
           </Card>
         </div>
 
+        {selectedAnalysis && (
+          <section className="space-y-3" aria-label="Card de visagismo selecionado">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-semibold">Card de visagismo</h2>
+                <p className="text-sm text-muted-foreground">
+                  O card só é exibido com foto real verificada da própria análise.
+                </p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setSelectedAnalysis(null)}>
+                Fechar
+              </Button>
+            </div>
+            <IdentityLockedVisagismCard analysis={selectedAnalysis} />
+          </section>
+        )}
+
         <Card>
           <CardHeader>
             <CardTitle>Histórico de Análises</CardTitle>
@@ -112,7 +132,9 @@ export default function AnalysesPage() {
                         </span>
                       )}
                       {getStatusBadge(analysis.status)}
-                      <Button variant="ghost" size="sm">Ver</Button>
+                      <Button variant="ghost" size="sm" onClick={() => setSelectedAnalysis(analysis)}>
+                        Ver
+                      </Button>
                     </div>
                   </div>
                 ))}
