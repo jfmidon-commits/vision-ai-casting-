@@ -117,10 +117,9 @@ class AgentResult:
         self.message = message
         self.error = error
 
-        # Safety policy: a generated social-content draft is not an external
-        # action. It must remain pending for explicit human approval before
-        # publishing/scheduling. This also protects callers that forget to set
-        # requires_approval on the concrete social agent.
+        # Safety policy: generated social content remains a draft until a
+        # person explicitly approves it. Keep the public approval contract
+        # stable as CONTENT for all callers and workflows.
         is_social_content_draft = (
             success
             and isinstance(self.data, dict)
@@ -128,7 +127,7 @@ class AgentResult:
         )
         self.requires_approval = requires_approval or is_social_content_draft
         self.approval_type = approval_type or (
-            "social_content" if is_social_content_draft else None
+            "CONTENT" if is_social_content_draft else None
         )
         self.confidence = confidence
         self.timestamp = datetime.utcnow()
@@ -175,41 +174,17 @@ class VisionAgent(ABC):
 
     @abstractmethod
     def can_handle(self, context: AgentContext) -> bool:
-        """
-        Determina se este agente pode processar a intenção do contexto.
-
-        Args:
-            context: O contexto de execução contendo a intenção
-
-        Returns:
-            True se o agente pode processar, False caso contrário
-        """
+        """Determina se este agente pode processar a intenção do contexto."""
         pass
 
     @abstractmethod
     async def execute(self, context: AgentContext) -> AgentResult:
-        """
-        Executa a tarefa associada ao contexto.
-
-        Args:
-            context: O contexto de execução completo
-
-        Returns:
-            AgentResult com o resultado da execução
-        """
+        """Executa a tarefa associada ao contexto."""
         pass
 
     @abstractmethod
     def validate(self, result: AgentResult) -> bool:
-        """
-        Valida se o resultado da execução é aceitável.
-
-        Args:
-            result: O resultado a ser validado
-
-        Returns:
-            True se o resultado é válido, False caso contrário
-        """
+        """Valida se o resultado da execução é aceitável."""
         pass
 
     def get_capabilities(self) -> List[AgentCapability]:
