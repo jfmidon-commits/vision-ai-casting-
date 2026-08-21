@@ -48,6 +48,14 @@ export const photoshootApi = {
   list: (params?: any) => api.get("/api/v1/photoshoots", { params }),
   get: (id: string) => api.get(`/api/v1/photoshoots/${id}`),
   create: (data: any) => api.post("/api/v1/photoshoots", data),
+  listPhotos: (id: string) => api.get(`/api/v1/photoshoots/${id}/photos`),
+  uploadPhoto: (id: string, file: File, angle = "front") => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return api.post(`/api/v1/photoshoots/${id}/photos?angle=${encodeURIComponent(angle)}`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
 };
 
 export const analysisApi = {
@@ -55,6 +63,17 @@ export const analysisApi = {
   get: (id: string) => api.get(`/api/v1/analyses/${id}`),
   start: (photoshootId: string, data: any) =>
     api.post(`/api/v1/ai/analyze?photoshoot_id=${photoshootId}`, data),
+};
+
+export const visagismApi = {
+  analyze: (photoshootId: string, cutLimit = 5, generateCard = true) =>
+    api.post("/api/v1/ai/analyze/visagism/full", {
+      photoshoot_id: photoshootId,
+      cut_limit: cutLimit,
+      generate_card: generateCard,
+    }),
+  getResult: (analysisId: string) =>
+    api.get(`/api/v1/analyses/${analysisId}/visagism`),
 };
 
 export const reportApi = {

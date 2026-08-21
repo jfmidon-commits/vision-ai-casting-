@@ -41,13 +41,51 @@ export interface Photo {
   analysis_status: string;
 }
 
+export interface HaircutRecommendation {
+  rank: number;
+  key: string;
+  name: string;
+  compatibility_score: number;
+  top_cm: number[];
+  sides_mm: number[];
+  fade: string;
+  connection: string;
+  direction: string;
+  finish: string;
+  maintenance: string;
+  avoid: string;
+  reasons: string[];
+  risks: string[];
+  evidence: Record<string, unknown>;
+}
+
+export interface FullVisagismAnalysis {
+  schema_version: string;
+  analysis_id?: string;
+  photoshoot_id: string;
+  status: string;
+  processed_images: number;
+  selected_views: Record<string, unknown>;
+  face_shape?: Record<string, unknown>;
+  measurements: Record<string, unknown>;
+  hair_analysis: Record<string, unknown>;
+  recommendations: HaircutRecommendation[];
+  top_recommendation?: HaircutRecommendation;
+  card_url?: string;
+  manifest_url?: string;
+  simulation_url?: string;
+  analysis_sources: string[];
+  limitations: string[];
+  integrity: Record<string, unknown>;
+}
+
 export interface Analysis {
   id: string;
   status: string;
   confidence_score?: number;
-  facial_structure?: any;
-  visagism?: any;
-  casting?: any;
+  facial_structure?: unknown;
+  visagism?: FullVisagismAnalysis;
+  casting?: unknown;
   created_at: string;
 }
 

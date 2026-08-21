@@ -1,4 +1,4 @@
-name: Visagism Benchmark - Dataset 001
+name: Visagism Benchmark - Current Dataset
 
 on:
   workflow_dispatch:
@@ -6,16 +6,17 @@ on:
       dataset_path:
         description: 'Caminho do dataset'
         required: false
-        default: 'backend/tests/fixtures/visagism/dataset_001'
+        default: 'assets/reference_photos/juliano_midon/visagismo_2026-08-21'
         type: string
 
   push:
     paths:
+      - 'backend/app/pipelines/visagism/**'
       - 'backend/app/ai/visagism/**'
       - 'backend/app/ai/image_triage/**'
       - 'backend/app/ai/mediapipe/**'
-      - 'backend/tests/fixtures/visagism/**'
-      - 'backend/tests/test_visagism_benchmark.py'
+      - 'assets/reference_photos/juliano_midon/visagismo_2026-08-21/**'
+      - 'backend/tests/test_current_visagism_dataset_pipeline.py'
       - '.github/workflows/visagism-benchmark.yml'
 
 env:
@@ -38,7 +39,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 libxrender-dev
+          sudo apt-get install -y libgl1 libglib2.0-0 libsm6 libxext6 libxrender-dev
 
       - name: Install Python dependencies
         run: |
@@ -48,35 +49,36 @@ jobs:
 
       - name: Verify imports
         run: |
-          python -c "import mediapipe; print(f'MediaPipe OK')"
+          python -c "import mediapipe; print('MediaPipe OK')"
           python -c "import cv2; print(f'OpenCV: {cv2.__version__}')"
           python -c "from PIL import Image; print('Pillow OK')"
           python -c "import numpy as np; print(f'NumPy: {np.__version__}')"
 
-      - name: Check dataset
+      - name: Check current dataset
         id: check_dataset
         run: |
-          DATASET_PATH="${{ github.event.inputs.dataset_path || 'backend/tests/fixtures/visagism/dataset_001' }}"
-          echo "dataset_path=$DATASET_PATH" >> $GITHUB_OUTPUT
-          if [ -d "$DATASET_PATH" ] && [ "$(ls -A $DATASET_PATH/*.jpg $DATASET_PATH/*.jpeg $DATASET_PATH/*.png 2>/dev/null | wc -l)" -gt 0 ]; then
-            echo "has_images=true" >> $GITHUB_OUTPUT
-          else
-            echo "has_images=false" >> $GITHUB_OUTPUT
+          DATASET_PATH="${{ github.event.inputs.dataset_path || 'assets/reference_photos/juliano_midon/visagismo_2026-08-21' }}"
+          echo "dataset_path=$DATASET_PATH" >> "$GITHUB_OUTPUT"
+          COUNT=$(find "$DATASET_PATH" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) | wc -l)
+          echo "image_count=$COUNT" >> "$GITHUB_OUTPUT"
+          if [ ! -d "$DATASET_PATH" ] || [ "$COUNT" -lt 3 ]; then
+            echo "Dataset insuficiente: $DATASET_PATH ($COUNT imagens)"
+            exit 1
           fi
 
-      - name: Run benchmark tests
+      - name: Run current-session visagism pipeline
         id: benchmark
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-test-mock' }}
+          CURRENT_VISAGISM_DATASET: ${{ github.workspace }}/${{ steps.check_dataset.outputs.dataset_path }}
         run: |
           cd backend
-          python -m pytest tests/test_visagism_benchmark.py -v --tb=short
+          python -m pytest tests/test_current_visagism_dataset_pipeline.py -v --tb=short
 
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: visagism-benchmark-dataset-001
+          name: visagism-benchmark-2026-08-21
           path: |
             backend/benchmark_output/
           retention-days: 7
@@ -86,9 +88,9 @@ jobs:
         if: always()
         run: |
           echo "=========================================="
-          echo "  VISAGISM BENCHMARK COMPLETE"
+          echo "  CURRENT VISAGISM PIPELINE COMPLETE"
           echo "=========================================="
           echo "Dataset: ${{ steps.check_dataset.outputs.dataset_path }}"
-          echo "Images: ${{ steps.check_dataset.outputs.has_images }}"
-          echo "Artifact: visagism-benchmark-dataset-001"
+          echo "Images: ${{ steps.check_dataset.outputs.image_count }}"
+          echo "Artifact: visagism-benchmark-2026-08-21"
           echo "=========================================="
