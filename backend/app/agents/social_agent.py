@@ -19,7 +19,6 @@ from app.agents.base import VisionAgent, AgentContext, AgentResult, AgentCapabil
 class SocialAgent(VisionAgent):
     """Agente especializado em criacao e gestao de conteudo social."""
 
-    # Templates de conteudo por plataforma
     CONTENT_TEMPLATES = {
         "instagram": {
             "formats": ["carousel", "reels", "story", "single"],
@@ -41,67 +40,29 @@ class SocialAgent(VisionAgent):
         },
     }
 
-    # Banco de hashtags por nicho
     HASHTAG_BANK = {
         "modeling": [
-            "#modelo",
-            "#fashion",
-            "#moda",
-            "#editorial",
-            "#runway",
-            "#modeling",
-            "#fashionmodel",
-            "#portrait",
-            "#style",
-            "#beauty",
+            "#modelo", "#fashion", "#moda", "#editorial", "#runway",
+            "#modeling", "#fashionmodel", "#portrait", "#style", "#beauty",
         ],
         "acting": [
-            "#ator",
-            "#atriz",
-            "#cinema",
-            "#teatro",
-            "#casting",
-            "#actress",
-            "#actor",
-            "#film",
-            "#movie",
-            "#performance",
+            "#ator", "#atriz", "#cinema", "#teatro", "#casting",
+            "#actress", "#actor", "#film", "#movie", "#performance",
         ],
         "influencer": [
-            "#influencer",
-            "#lifestyle",
-            "#contentcreator",
-            "#digital",
-            "#creator",
-            "#influenciador",
-            "#brand",
-            "#collab",
+            "#influencer", "#lifestyle", "#contentcreator", "#digital",
+            "#creator", "#influenciador", "#brand", "#collab",
         ],
         "fitness": [
-            "#fitness",
-            "#saude",
-            "#workout",
-            "#gym",
-            "#fit",
-            "#health",
-            "#training",
-            "#wellness",
-            "#active",
+            "#fitness", "#saude", "#workout", "#gym", "#fit", "#health",
+            "#training", "#wellness", "#active",
         ],
         "beauty": [
-            "#beleza",
-            "#makeup",
-            "#maquiagem",
-            "#skincare",
-            "#beauty",
-            "#glam",
-            "#cosmetics",
-            "#selfcare",
-            "#glowup",
+            "#beleza", "#makeup", "#maquiagem", "#skincare", "#beauty",
+            "#glam", "#cosmetics", "#selfcare", "#glowup",
         ],
     }
 
-    # Templates de legenda
     CAPTION_TEMPLATES = {
         "behind_the_scenes": [
             "Nos bastidores de {project}! {emoji} Cada detalhe conta quando voce ama o que faz. {cta}",
@@ -170,10 +131,17 @@ class SocialAgent(VisionAgent):
                     error=f"Intencao '{intent}' nao suportada pelo SocialAgent",
                 )
 
+            requires_approval = intent in {
+                "CREATE_CONTENT",
+                "SCHEDULE_CONTENT",
+                "PUBLISH_CONTENT",
+            }
             return AgentResult(
                 success=True,
                 data=result,
                 message=f"SocialAgent executou '{intent}' com sucesso",
+                requires_approval=requires_approval,
+                approval_type="CONTENT" if requires_approval else None,
             )
 
         except Exception as e:
@@ -187,15 +155,11 @@ class SocialAgent(VisionAgent):
         if not result.success:
             return False
         data = result.data or {}
-        # Validar estrutura minima
         if "content" in data and not data["content"]:
             return False
         return True
 
-    # ========== IMPLEMENTACOES ==========
-
     async def _create_content(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Cria um plano de conteudo completo."""
         platform = data.get("platform", "instagram")
         content_type = data.get("content_type", "portfolio")
         niche = data.get("niche", "modeling")
@@ -205,17 +169,9 @@ class SocialAgent(VisionAgent):
         template_info = self.CONTENT_TEMPLATES.get(
             platform, self.CONTENT_TEMPLATES["instagram"]
         )
-
-        # Gerar legenda
         caption = self._generate_caption_text(content_type, project_name, team)
-
-        # Gerar hashtags
         hashtags = self._generate_hashtags(niche, platform)
-
-        # Sugerir horario
         optimal_time = random.choice(template_info["optimal_times"])
-
-        # Sugerir formato
         suggested_format = random.choice(template_info["formats"])
 
         return {
@@ -232,18 +188,14 @@ class SocialAgent(VisionAgent):
         }
 
     async def _schedule_content(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Agenda conteudo para publicacao."""
         contents = data.get("contents", [])
         timezone = data.get("timezone", "America/Sao_Paulo")
-
         schedule = []
         base_date = datetime.utcnow()
 
         for i, content in enumerate(contents):
-            # Espacar posts a cada 6-12 horas
             hours_offset = i * random.randint(6, 12)
             post_time = base_date + timedelta(hours=hours_offset)
-
             schedule.append(
                 {
                     "content_id": f"content_{i+1}",
@@ -262,10 +214,8 @@ class SocialAgent(VisionAgent):
         }
 
     async def _publish_content(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Simula publicacao de conteudo (integracao real com APIs sociais)."""
         content = data.get("content", {})
         platforms = data.get("platforms", ["instagram"])
-
         published = []
         for platform in platforms:
             published.append(
@@ -277,7 +227,6 @@ class SocialAgent(VisionAgent):
                     "url": f"https://{platform}.com/p/{random.randint(100000, 999999)}",
                 }
             )
-
         return {
             "published_posts": published,
             "total_published": len(published),
@@ -285,37 +234,30 @@ class SocialAgent(VisionAgent):
         }
 
     async def _analyze_performance(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Analisa performance de conteudo existente."""
         posts = data.get("posts", [])
-
         if not posts:
-            return {
-                "message": "Nenhum post fornecido para analise",
-                "overall_score": 0,
-            }
+            return {"message": "Nenhum post fornecido para analise", "overall_score": 0}
 
         total_engagement = 0
         total_reach = 0
         best_post = None
         best_score = 0
-
         analyzed_posts = []
+
         for post in posts:
             likes = post.get("likes", 0)
             comments = post.get("comments", 0)
             shares = post.get("shares", 0)
             saves = post.get("saves", 0)
             reach = post.get("reach", 1)
-
             engagement_rate = (
                 (likes + comments * 2 + shares * 3 + saves * 2) / max(reach, 1)
             ) * 100
             total_engagement += engagement_rate
             total_reach += reach
 
-            score = engagement_rate
-            if score > best_score:
-                best_score = score
+            if engagement_rate > best_score:
+                best_score = engagement_rate
                 best_post = post
 
             analyzed_posts.append(
@@ -333,7 +275,6 @@ class SocialAgent(VisionAgent):
             )
 
         avg_engagement = total_engagement / len(posts) if posts else 0
-
         return {
             "analyzed_posts": analyzed_posts,
             "total_posts": len(posts),
@@ -346,17 +287,11 @@ class SocialAgent(VisionAgent):
         }
 
     async def _suggest_hashtags(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Sugere hashtags otimizadas para o nicho."""
         niche = data.get("niche", "modeling")
         platform = data.get("platform", "instagram")
         count = data.get("count", 20)
-
         base_hashtags = self.HASHTAG_BANK.get(niche, self.HASHTAG_BANK["modeling"])
-
-        # Adicionar hashtags genericas de engajamento
         generic = ["#instagood", "#photooftheday", "#love", "#beautiful", "#art"]
-
-        # Adicionar hashtags de nicho relacionados
         related_niches = random.sample(
             list(self.HASHTAG_BANK.keys()), min(2, len(self.HASHTAG_BANK))
         )
@@ -371,21 +306,14 @@ class SocialAgent(VisionAgent):
 
         all_hashtags = list(set(base_hashtags + generic + related_hashtags))
         random.shuffle(all_hashtags)
-
-        # Limitar ao count solicitado
         suggested = all_hashtags[:count]
-
-        # Categorizar
+        niche_tags = [
+            h for h in suggested if any(n in h.lower() for n in [niche, niche[:4]])
+        ]
         categorized = {
-            "niche": [
-                h for h in suggested if any(n in h.lower() for n in [niche, niche[:4]])
-            ],
+            "niche": niche_tags,
             "generic": [h for h in suggested if h in generic],
-            "related": [
-                h
-                for h in suggested
-                if h not in categorized.get("niche", []) and h not in generic
-            ],
+            "related": [h for h in suggested if h not in niche_tags and h not in generic],
         }
 
         return {
@@ -398,16 +326,13 @@ class SocialAgent(VisionAgent):
         }
 
     async def _generate_caption(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Gera uma legenda personalizada."""
         content_type = data.get("content_type", "portfolio")
         tone = data.get("tone", "professional")
         language = data.get("language", "pt")
         project_name = data.get("project_name", "")
         team = data.get("team", "")
-
         caption = self._generate_caption_text(content_type, project_name, team, tone)
 
-        # Adicionar CTA baseado no tom
         ctas = {
             "professional": [
                 "Comenta o que achou!",
@@ -425,9 +350,7 @@ class SocialAgent(VisionAgent):
                 "Acredite em voce!",
             ],
         }
-
         cta = random.choice(ctas.get(tone, ctas["professional"]))
-
         return {
             "caption": f"{caption}\n\n{cta}",
             "tone": tone,
@@ -438,10 +361,8 @@ class SocialAgent(VisionAgent):
         }
 
     async def _optimal_posting_times(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Retorna horarios otimos de postagem por plataforma."""
         platforms = data.get("platforms", ["instagram", "tiktok", "linkedin"])
         audience_timezone = data.get("audience_timezone", "America/Sao_Paulo")
-
         results = {}
         for platform in platforms:
             template = self.CONTENT_TEMPLATES.get(
@@ -454,14 +375,11 @@ class SocialAgent(VisionAgent):
                 "peak_engagement_window": f"{template['optimal_times'][1]} - {template['optimal_times'][2]}",
                 "timezone": audience_timezone,
             }
-
         return {
             "platforms": results,
             "general_recommendation": "Postar entre 11h e 21h para maior alcance",
             "audience_timezone": audience_timezone,
         }
-
-    # ========== HELPERS ==========
 
     def _generate_caption_text(
         self,
@@ -470,12 +388,10 @@ class SocialAgent(VisionAgent):
         team: str,
         tone: str = "professional",
     ) -> str:
-        """Gera texto de legenda usando templates."""
         templates = self.CAPTION_TEMPLATES.get(
             content_type, self.CAPTION_TEMPLATES["portfolio"]
         )
         template = random.choice(templates)
-
         emojis = ["✨", "🎬", "📸", "💫", "🔥", "🌟", "💎", "🎯", "🚀", "❤️"]
         quotes = [
             "O sucesso e a soma de pequenos esforcos repetidos diariamente.",
@@ -501,32 +417,25 @@ class SocialAgent(VisionAgent):
             question=random.choice(questions),
             options="opcoes",
         )
-
         return caption.strip()
 
     def _generate_hashtags(self, niche: str, platform: str) -> List[str]:
-        """Gera lista de hashtags."""
         template = self.CONTENT_TEMPLATES.get(
             platform, self.CONTENT_TEMPLATES["instagram"]
         )
         min_tags, max_tags = template["hashtag_count"]
-
         base = self.HASHTAG_BANK.get(niche, self.HASHTAG_BANK["modeling"])
         generic = ["#instagood", "#photooftheday", "#love"]
-
         all_tags = list(set(base + generic))
         random.shuffle(all_tags)
-
         return all_tags[: random.randint(min_tags, max_tags)]
 
     def _estimate_reach(self, platform: str, niche: str) -> Dict[str, Any]:
-        """Estima alcance do conteudo."""
         base_reach = {
             "instagram": random.randint(500, 5000),
             "tiktok": random.randint(1000, 10000),
             "linkedin": random.randint(200, 2000),
         }
-
         reach = base_reach.get(platform, 1000)
         niche_multiplier = {
             "modeling": 1.2,
@@ -536,7 +445,6 @@ class SocialAgent(VisionAgent):
             "beauty": 1.4,
         }
         reach = int(reach * niche_multiplier.get(niche, 1.0))
-
         return {
             "estimated_reach": reach,
             "estimated_impressions": int(reach * random.uniform(1.5, 3.0)),
@@ -544,43 +452,18 @@ class SocialAgent(VisionAgent):
             "confidence": random.choice(["high", "medium", "medium"]),
         }
 
-    def _generate_content_ideas(
-        self, niche: str, platform: str
-    ) -> List[Dict[str, Any]]:
-        """Gera ideias de conteudo."""
+    def _generate_content_ideas(self, niche: str, platform: str) -> List[Dict[str, Any]]:
         ideas = [
-            {
-                "type": "behind_the_scenes",
-                "title": "Bastidores do trabalho",
-                "difficulty": "easy",
-            },
-            {
-                "type": "tutorial",
-                "title": f"Como me preparo para {niche}",
-                "difficulty": "medium",
-            },
+            {"type": "behind_the_scenes", "title": "Bastidores do trabalho", "difficulty": "easy"},
+            {"type": "tutorial", "title": f"Como me preparo para {niche}", "difficulty": "medium"},
             {"type": "q_and_a", "title": "Perguntas e respostas", "difficulty": "easy"},
-            {
-                "type": "transformation",
-                "title": "Antes e depois",
-                "difficulty": "medium",
-            },
-            {
-                "type": "day_in_life",
-                "title": "Um dia na minha vida",
-                "difficulty": "easy",
-            },
-            {
-                "type": "tips",
-                "title": f"5 dicas para quem quer trabalhar com {niche}",
-                "difficulty": "easy",
-            },
+            {"type": "transformation", "title": "Antes e depois", "difficulty": "medium"},
+            {"type": "day_in_life", "title": "Um dia na minha vida", "difficulty": "easy"},
+            {"type": "tips", "title": f"5 dicas para quem quer trabalhar com {niche}", "difficulty": "easy"},
         ]
-
         return random.sample(ideas, min(3, len(ideas)))
 
     def _rate_performance(self, engagement_rate: float) -> str:
-        """Classifica performance baseada no engagement rate."""
         if engagement_rate >= 5.0:
             return "excellent"
         elif engagement_rate >= 3.0:
@@ -592,7 +475,6 @@ class SocialAgent(VisionAgent):
         return "below_average"
 
     def _performance_recommendations(self, avg_engagement: float) -> List[str]:
-        """Gera recomendacoes baseadas na performance."""
         recs = []
         if avg_engagement < 1.0:
             recs.append("Aumentar frequencia de posts para 1x ao dia")
