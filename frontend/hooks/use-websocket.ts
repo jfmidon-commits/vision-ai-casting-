@@ -20,7 +20,12 @@ export function useWebSocket(
   const connect = useCallback(() => {
     if (!analysisId) return;
 
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000";
+    const wsUrl =
+      process.env.NEXT_PUBLIC_WS_URL ||
+      (typeof window !== "undefined"
+        ? `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}`
+        : "ws://localhost:8000");
+
     ws.current = new WebSocket(`${wsUrl}/ws/progress/${analysisId}`);
 
     ws.current.onopen = () => {
