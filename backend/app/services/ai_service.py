@@ -1,5 +1,6 @@
 import asyncio
 import time
+from datetime import datetime
 from typing import List, Dict
 from uuid import UUID
 
@@ -92,11 +93,18 @@ class AIService:
         return await analyzer.analyze_single(preprocessed)
 
     @classmethod
-    async def analyze_visagism(cls, photo):
+    async def analyze_visagism(cls, photo, parallel_results: Dict = None):
+        """
+        Análise de visagismo com suporte a parallel_results dos motores reais.
+        Mantém compatibilidade: parallel_results é opcional.
+        """
         preprocessor = ImagePreprocessor()
-        preprocessed = await preprocessor.process_single({"id": str(photo.id), "url": photo.url})
+        preprocessed = await preprocessor.process_single(
+            {"id": str(photo.id), "url": photo.url}
+        )
         analyzer = VisagismAnalyzer()
-        return await analyzer.analyze_single(preprocessed)
+        context = {"parallel_results": parallel_results or {}}
+        return await analyzer.analyze_single(preprocessed, context=context)
 
     @classmethod
     async def analyze_casting(cls, photo):
