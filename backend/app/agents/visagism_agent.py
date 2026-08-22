@@ -1,10 +1,15 @@
 """VisagismAgent - Análise de visagismo e recomendações de estilo."""
+import logging
 import os
 from typing import Dict, List, Optional
-from app.agents.base import VisionAgent, AgentContext, AgentResult, AgentCapability
-from app.ai.visagism.analyzer import VisagismAnalyzer
+
+from app.agents.base import AgentCapability, AgentContext, AgentResult, VisionAgent
 from app.ai.image_triage.engine import ImageTriageEngine, TriageCategory
-import logging
+from app.ai.visagism.analyzer import VisagismAnalyzer
+from app.ai.visagism.card_photo_guard import (
+    CardPhotoGuardError,
+    DEFAULT_CARD_PHOTO_GUARD,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,18 +42,35 @@ class VisagismAgent(VisionAgent):
                     message="Nenhuma foto fornecida para análise",
                 )
 
+            # Fail closed before analysis/card generation: every successful
+            # visagism result must have a proven real source photo.
+            try:
+                card_media = DEFAULT_CARD_PHOTO_GUARD.build_card_media(photos=photos)
+            except CardPhotoGuardError as exc:
+                return AgentResult(
+                    success=False,
+                    data={
+                        "error": str(exc),
+                        "card_media": None,
+                        "placeholders": ["real_person_photo_required"],
+                    },
+                    message="É obrigatória uma foto real da pessoa para gerar o card",
+                )
+
             # Triagem primeiro
             triage_results = []
             for photo in photos:
                 path = photo.get("path") or photo.get("url")
                 if path and os.path.exists(path):
                     result = self.triage_engine.process_image(path)
-                    triage_results.append({
-                        "filename": result.filename,
-                        "category": result.category.value,
-                        "confidence": result.confidence,
-                        "selected": result.selected,
-                    })
+                    triage_results.append(
+                        {
+                            "filename": result.filename,
+                            "category": result.category.value,
+                            "confidence": result.confidence,
+                            "selected": result.selected,
+                        }
+                    )
 
             # Análise de visagismo
             analysis = await self.analyzer.analyze(photos)
@@ -61,6 +83,10 @@ class VisagismAgent(VisionAgent):
                     "eyebrows": analysis.get("recommended_eyebrow_shapes", []),
                     "makeup": analysis.get("recommended_makeup_styles", []),
                 },
+                # Mandatory card-media contract. Consumers must render
+                # personPhoto even if a validated simulation is later attached.
+                "card_media": card_media,
+                "source_photos": card_media["realPhotoRefs"],
                 "limitations": [],
                 "evidence_map": {
                     "face_shape": analysis.get("face_shape_category"),
@@ -94,5 +120,12 @@ class VisagismAgent(VisionAgent):
             return False
         data = result.data
         if not isinstance(data, dict):
+            return False
+        card_media = data.get("card_media")
+        if not isinstance(card_media, dict):
+            return False
+        if not card_media.get("realPhotoVerified"):
+            return False
+        if not card_media.get("personPhoto"):
             return False
         return "analysis" in data or "placeholders" in data

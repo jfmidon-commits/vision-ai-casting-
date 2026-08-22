@@ -26,42 +26,42 @@ class AgentCapability(str, Enum):
     # Identity
     PROFILE_MANAGEMENT = "profile_management"
     IDENTITY_VERIFICATION = "identity_verification"
-    
+
     # Visagism
     VISAGISM_ANALYSIS = "visagism_analysis"
     STYLE_RECOMMENDATION = "style_recommendation"
-    
+
     # Digital Twin
     DIGITAL_TWIN_CREATION = "digital_twin_creation"
     DIGITAL_TWIN_UPDATE = "digital_twin_update"
     CHARACTER_SIMULATION = "character_simulation"
-    
+
     # Casting
     CASTING_ANALYSIS = "casting_analysis"
     CASTING_MATCHING = "casting_matching"
     CASTING_APPLICATION = "casting_application"
-    
+
     # Portfolio
     PORTFOLIO_MANAGEMENT = "portfolio_management"
     PORTFOLIO_OPTIMIZATION = "portfolio_optimization"
-    
+
     # Social
     CONTENT_CREATION = "content_creation"
     CONTENT_SCHEDULING = "content_scheduling"
     SOCIAL_PUBLISHING = "social_publishing"
-    
+
     # Opportunities
     OPPORTUNITY_SEARCH = "opportunity_search"
     OPPORTUNITY_MATCHING = "opportunity_matching"
-    
+
     # Approval
     APPROVAL_WORKFLOW = "approval_workflow"
     HUMAN_REVIEW = "human_review"
-    
+
     # Analytics
     PERFORMANCE_ANALYSIS = "performance_analysis"
     METRICS_COLLECTION = "metrics_collection"
-    
+
     # Automation
     WORKFLOW_AUTOMATION = "workflow_automation"
     COMMUNICATION_AUTOMATION = "communication_automation"
@@ -69,7 +69,7 @@ class AgentCapability(str, Enum):
 
 class AgentContext:
     """Contexto passado para um agente durante a execução."""
-    
+
     def __init__(
         self,
         user_id: UUID,
@@ -89,11 +89,11 @@ class AgentContext:
         self.session_id = session_id or str(uuid4())
         self.created_at = datetime.utcnow()
         self.agent_results: Dict[str, Any] = {}
-    
+
     def add_result(self, key: str, value: Any):
         """Adiciona um resultado ao contexto."""
         self.agent_results[key] = value
-    
+
     def get_result(self, key: str) -> Optional[Any]:
         """Recupera um resultado do contexto."""
         return self.agent_results.get(key)
@@ -101,7 +101,7 @@ class AgentContext:
 
 class AgentResult:
     """Resultado padronizado da execução de um agente."""
-    
+
     def __init__(
         self,
         success: bool,
@@ -116,11 +116,22 @@ class AgentResult:
         self.data = data or {}
         self.message = message
         self.error = error
-        self.requires_approval = requires_approval
-        self.approval_type = approval_type
+
+        # Safety policy: generated social content remains a draft until a
+        # person explicitly approves it. Keep the public approval contract
+        # stable as CONTENT for all callers and workflows.
+        is_social_content_draft = (
+            success
+            and isinstance(self.data, dict)
+            and {"caption", "hashtags", "suggested_format"}.issubset(self.data)
+        )
+        self.requires_approval = requires_approval or is_social_content_draft
+        self.approval_type = approval_type or (
+            "CONTENT" if is_social_content_draft else None
+        )
         self.confidence = confidence
         self.timestamp = datetime.utcnow()
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "success": self.success,
@@ -137,13 +148,13 @@ class AgentResult:
 class VisionAgent(ABC):
     """
     Interface base para todos os agentes do Vision Ecosystem.
-    
+
     Todo mini-cérebro deve herdar desta classe e implementar:
     - can_handle: determina se o agente pode processar uma intenção
     - execute: executa a tarefa e retorna um AgentResult
     - validate: valida o resultado da execução
     """
-    
+
     def __init__(
         self,
         agent_id: Optional[str] = None,
@@ -160,54 +171,30 @@ class VisionAgent(ABC):
         self.updated_at = datetime.utcnow()
         self.execution_count = 0
         self.error_count = 0
-    
+
     @abstractmethod
     def can_handle(self, context: AgentContext) -> bool:
-        """
-        Determina se este agente pode processar a intenção do contexto.
-        
-        Args:
-            context: O contexto de execução contendo a intenção
-            
-        Returns:
-            True se o agente pode processar, False caso contrário
-        """
+        """Determina se este agente pode processar a intenção do contexto."""
         pass
-    
+
     @abstractmethod
     async def execute(self, context: AgentContext) -> AgentResult:
-        """
-        Executa a tarefa associada ao contexto.
-        
-        Args:
-            context: O contexto de execução completo
-            
-        Returns:
-            AgentResult com o resultado da execução
-        """
+        """Executa a tarefa associada ao contexto."""
         pass
-    
+
     @abstractmethod
     def validate(self, result: AgentResult) -> bool:
-        """
-        Valida se o resultado da execução é aceitável.
-        
-        Args:
-            result: O resultado a ser validado
-            
-        Returns:
-            True se o resultado é válido, False caso contrário
-        """
+        """Valida se o resultado da execução é aceitável."""
         pass
-    
+
     def get_capabilities(self) -> List[AgentCapability]:
         """Retorna a lista de capacidades deste agente."""
         return self.capabilities.copy()
-    
+
     def has_capability(self, capability: AgentCapability) -> bool:
         """Verifica se o agente possui uma capacidade específica."""
         return capability in self.capabilities
-    
+
     def health_check(self) -> Dict[str, Any]:
         """Retorna o status de saúde do agente."""
         return {
@@ -221,12 +208,12 @@ class VisionAgent(ABC):
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
         }
-    
+
     def _increment_execution(self):
         """Incrementa o contador de execuções."""
         self.execution_count += 1
         self.updated_at = datetime.utcnow()
-    
+
     def _increment_error(self):
         """Incrementa o contador de erros."""
         self.error_count += 1
