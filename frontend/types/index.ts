@@ -41,15 +41,56 @@ export interface Photo {
   analysis_status: string;
 }
 
+export interface PhotoUploadResult {
+  id: string;
+  url: string;
+  thumbnail_url: string;
+  upload_url: string;
+  expires_at: string;
+}
+
+export type PhotoTriageCategory =
+  | "frontal_close"
+  | "frontal"
+  | "three_quarter_left"
+  | "three_quarter_right"
+  | "profile_left"
+  | "profile_right"
+  | "smiling"
+  | "hairline"
+  | "posterior"
+  | "half_body"
+  | "unknown"
+  | "rejected";
+
+export interface PhotoTriageResult {
+  accepted: boolean;
+  category: PhotoTriageCategory;
+  confidence: number;
+  selected: boolean;
+  rejection_reasons: string[];
+}
+
 export interface VisagismCardMedia {
   personPhoto: string;
   displayImage: string;
   realPhotoVerified: boolean;
-  realPhotoRefs: string[];
+  realPhotoRefs?: string[];
   simulationApplied: boolean;
   identityVerified: boolean;
   fallbackUsed?: boolean;
-  displayMode?: 'original' | 'validated_hair_beard_overlay';
+  displayMode?: "original" | "validated_hair_beard_overlay" | "original_plus_spec";
+}
+
+export interface SimulationPreflightResult {
+  analysis_id: string;
+  selected_haircut: string;
+  simulation_status: "blocked";
+  reason: string;
+  provider_configured: false;
+  ready_enabled: false;
+  reference_count: number;
+  card_media: VisagismCardMedia;
 }
 
 export interface Analysis {

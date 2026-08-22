@@ -48,13 +48,31 @@ export const photoshootApi = {
   list: (params?: any) => api.get("/api/v1/photoshoots", { params }),
   get: (id: string) => api.get(`/api/v1/photoshoots/${id}`),
   create: (data: any) => api.post("/api/v1/photoshoots", data),
+  uploadPhoto: (photoshootId: string, file: File, angle: string) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return api.post(`/api/v1/photoshoots/${photoshootId}/photos`, formData, {
+      params: { angle },
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+};
+
+export const photoApi = {
+  get: (id: string) => api.get(`/api/v1/photos/${id}`),
+  triage: (id: string) => api.post(`/api/v1/photos/${id}/triage`),
 };
 
 export const analysisApi = {
   list: (params?: any) => api.get("/api/v1/analyses", { params }),
   get: (id: string) => api.get(`/api/v1/analyses/${id}`),
+  getVisagism: (id: string) => api.get(`/api/v1/analyses/${id}/visagism`),
   start: (photoshootId: string, data: any) =>
     api.post(`/api/v1/ai/analyze?photoshoot_id=${photoshootId}`, data),
+  simulateVisagism: (id: string, haircutName: string) =>
+    api.post(`/api/v1/analyses/${id}/visagism/simulate`, {
+      haircut_name: haircutName,
+    }),
 };
 
 export const reportApi = {
