@@ -7,7 +7,7 @@ import secrets
 from uuid import uuid4
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, text
 from app.config import settings
 from app.models import User, Tenant
 from app.schemas import Token
@@ -25,12 +25,7 @@ class AuthService:
                 return False
             salt = base64.b64decode(salt_b64.encode("ascii"))
             expected = base64.b64decode(digest_b64.encode("ascii"))
-            actual = hashlib.pbkdf2_hmac(
-                "sha256",
-                plain_password.encode("utf-8"),
-                salt,
-                int(iterations),
-            )
+            actual = hashlib.pbkdf2_hmac("sha256", plain_password.encode("utf-8"), salt, int(iterations))
             return hmac.compare_digest(actual, expected)
         except (ValueError, TypeError):
             return False
@@ -38,12 +33,7 @@ class AuthService:
     @staticmethod
     def get_password_hash(password: str) -> str:
         salt = secrets.token_bytes(16)
-        digest = hashlib.pbkdf2_hmac(
-            "sha256",
-            password.encode("utf-8"),
-            salt,
-            PBKDF2_ITERATIONS,
-        )
+        digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, PBKDF2_ITERATIONS)
         return "pbkdf2_sha256${}${}${}".format(
             PBKDF2_ITERATIONS,
             base64.b64encode(salt).decode("ascii"),
@@ -67,7 +57,11 @@ class AuthService:
     async def authenticate(cls, db: AsyncSession, email: str, password: str):
         result = await db.execute(select(User).where(User.email == email))
         user = result.scalar_one_or_none()
-        if not user or not cls.verify_password(password, user.hashed_password):
+        if not user:
+            raise ValueError("Invalid credentials")
+        password_result = await db.execute(text("SELECT hashed_password FROM users WHERE id = :id"), {"id": str(user.id)})
+        hashed_password = password_result.scalar_one_or_none()
+        if not cls.verify_password(password, hashed_password):
             raise ValueError("Invalid credentials")
         access_token = cls.create_access_token({"sub": str(user.id), "tenant_id": str(user.tenant_id), "role": user.role})
         refresh_token = cls.create_refresh_token({"sub": str(user.id)})
@@ -106,15 +100,17 @@ class AuthService:
         db.add(tenant)
         await db.flush()
 
-        hashed = cls.get_password_hash(user_data.password)
         user = User(
             email=user_data.email,
-            hashed_password=hashed,
             name=user_data.name or local_part,
             tenant_id=tenant.id,
             role="admin",
         )
         db.add(user)
+        await db.flush()
+
+        hashed = cls.get_password_hash(user_data.password)
+        await db.execute(text("UPDATE users SET hashed_password = :hashed WHERE id = :id"), {"hashed": hashed, "id": str(user.id)})
         await db.commit()
         await db.refresh(user)
         return {"id": str(user.id), "email": user.email, "tenant_id": str(user.tenant_id)}
