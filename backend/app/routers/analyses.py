@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.visagism.adapters.deepface_identity import DeepFaceArcFaceVerifier
 from app.ai.visagism.adapters.mediapipe_hair_mask import MediaPipeHairBeardMaskAdapter
+from app.ai.visagism.interpretation import build_visagism_interpretation
 from app.ai.visagism.simulation_service import VisagismSimulationService
 from app.database import get_db
 from app.middleware.auth import get_current_user
@@ -27,16 +28,18 @@ class VisagismSimulationRequest(BaseModel):
 
 
 async def _download_pil_image(session: Any, url: str) -> Image.Image:
-    """Download a repository-owned photo URL and decode it as RGB.
-
-    The endpoint never sends the decoded image to a third-party renderer in V1;
-    it is used only by local mask and identity gates.
-    """
     async with session.get(url) as response:
         response.raise_for_status()
         raw = await response.read()
     with Image.open(io.BytesIO(raw)) as image:
         return image.convert("RGB").copy()
+
+
+def _with_interpretation(visagism: Any) -> Dict[str, Any]:
+    """Return the persisted raw result plus the stable grounded presentation layer."""
+    raw = dict(visagism) if isinstance(visagism, dict) else {}
+    raw["interpretation"] = build_visagism_interpretation(raw)
+    return raw
 
 
 def _public_simulation_contract(
@@ -47,13 +50,6 @@ def _public_simulation_contract(
     reference_count: int,
     service_result: Dict[str, Any],
 ) -> Dict[str, Any]:
-    """Return only JSON-safe, user-facing fail-closed simulation state.
-
-    The local endpoint deliberately has no renderer/provider configured. Even if
-    a future code change accidentally hands back ``ready``, this boundary keeps
-    the public API blocked until a separately reviewed provider-enabled endpoint
-    is explicitly activated.
-    """
     service_status = service_result.get("simulation_status")
     reason = service_result.get("reason") or "simulation_blocked"
     if service_status != "blocked":
@@ -106,10 +102,7 @@ async def get_analysis(
 ):
     result = await db.execute(
         select(Analysis).where(
-            and_(
-                Analysis.id == analysis_id,
-                Analysis.tenant_id == current_user.tenant_id,
-            )
+            and_(Analysis.id == analysis_id, Analysis.tenant_id == current_user.tenant_id)
         )
     )
     analysis = result.scalar_one_or_none()
@@ -126,10 +119,7 @@ async def get_facial_analysis(
 ):
     result = await db.execute(
         select(Analysis).where(
-            and_(
-                Analysis.id == analysis_id,
-                Analysis.tenant_id == current_user.tenant_id,
-            )
+            and_(Analysis.id == analysis_id, Analysis.tenant_id == current_user.tenant_id)
         )
     )
     analysis = result.scalar_one_or_none()
@@ -146,16 +136,34 @@ async def get_visagism_analysis(
 ):
     result = await db.execute(
         select(Analysis).where(
-            and_(
-                Analysis.id == analysis_id,
-                Analysis.tenant_id == current_user.tenant_id,
-            )
+            and_(Analysis.id == analysis_id, Analysis.tenant_id == current_user.tenant_id)
         )
     )
     analysis = result.scalar_one_or_none()
     if not analysis:
         raise HTTPException(status_code=404, detail="Analysis not found")
-    return APIResponse(data=analysis.visagism)
+    return APIResponse(data=_with_interpretation(analysis.visagism))
+
+
+@router.get("/{analysis_id}/visagism/barber-brief", response_model=APIResponse)
+async def get_visagism_barber_brief(
+    analysis_id: UUID,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Expose only the grounded barber brief generated from the persisted result."""
+    result = await db.execute(
+        select(Analysis).where(
+            and_(Analysis.id == analysis_id, Analysis.tenant_id == current_user.tenant_id)
+        )
+    )
+    analysis = result.scalar_one_or_none()
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+    interpretation = build_visagism_interpretation(
+        analysis.visagism if isinstance(analysis.visagism, dict) else {}
+    )
+    return APIResponse(data=interpretation.get("barber_brief"))
 
 
 @router.post("/{analysis_id}/visagism/simulate", response_model=APIResponse)
@@ -165,18 +173,9 @@ async def simulate_visagism_haircut_fail_closed(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Run local simulation preflight while keeping user-visible state blocked.
-
-    This V1 endpoint intentionally configures no inpainting renderer. It can run
-    the local MediaPipe mask and ArcFace identity gates, but the public response
-    always displays the original real photo and never activates ``ready``.
-    """
     result = await db.execute(
         select(Analysis).where(
-            and_(
-                Analysis.id == analysis_id,
-                Analysis.tenant_id == current_user.tenant_id,
-            )
+            and_(Analysis.id == analysis_id, Analysis.tenant_id == current_user.tenant_id)
         )
     )
     analysis = result.scalar_one_or_none()
@@ -233,12 +232,8 @@ async def simulate_visagism_haircut_fail_closed(
         )
         return APIResponse(data=safe, message="Simulation blocked safely")
 
-    reference_images = [
-        item for item in downloaded[1:] if not isinstance(item, Exception)
-    ]
-    source_images = [{"image": original_image}] + [
-        {"image": image} for image in reference_images
-    ]
+    reference_images = [item for item in downloaded[1:] if not isinstance(item, Exception)]
+    source_images = [{"image": original_image}] + [{"image": image} for image in reference_images]
 
     service = VisagismSimulationService(
         mask_adapter=MediaPipeHairBeardMaskAdapter(),
@@ -271,10 +266,7 @@ async def get_casting_analysis(
 ):
     result = await db.execute(
         select(Analysis).where(
-            and_(
-                Analysis.id == analysis_id,
-                Analysis.tenant_id == current_user.tenant_id,
-            )
+            and_(Analysis.id == analysis_id, Analysis.tenant_id == current_user.tenant_id)
         )
     )
     analysis = result.scalar_one_or_none()

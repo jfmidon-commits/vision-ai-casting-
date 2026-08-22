@@ -7,8 +7,9 @@ import {
   VisagismPhotoAngle,
   VisagismPhotoDraft,
 } from "@/components/visagism/photo-upload-guide";
+import { VisagismResultView } from "@/components/visagism/visagism-result";
 import { analysisApi, photoApi, photoshootApi, profileApi } from "@/lib/api";
-import type { PhotoTriageResult, Profile } from "@/types";
+import type { PhotoTriageResult, Profile, VisagismResult } from "@/types";
 
 type Step = "landing" | "upload" | "review" | "processing" | "result" | "error";
 
@@ -16,8 +17,6 @@ type UploadedPhotoState = {
   photoId: string;
   triage: PhotoTriageResult;
 };
-
-type VisagismResult = Record<string, unknown>;
 
 const initialPhotos: VisagismPhotoDraft[] = [
   {
@@ -249,19 +248,13 @@ export default function VisagismPage() {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={photo.previewUrl} alt={photo.label} className="aspect-[4/3] w-full object-cover" />
                 ) : (
-                  <div className="flex aspect-[4/3] items-center justify-center bg-muted text-xs text-muted-foreground">
-                    Sem foto
-                  </div>
+                  <div className="flex aspect-[4/3] items-center justify-center bg-muted text-xs text-muted-foreground">Sem foto</div>
                 )}
                 <div className="p-3">
                   <p className="text-xs text-muted-foreground">Foto {index + 1}</p>
                   <p className="font-medium">{photo.label}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {!triage
-                      ? "Aguardando triagem"
-                      : triage.accepted
-                        ? "✓ Foto aceita"
-                        : `⚠ ${triage.rejection_reasons?.[0] || "Foto rejeitada"}`}
+                    {!triage ? "Aguardando triagem" : triage.accepted ? "✓ Foto aceita" : `⚠ ${triage.rejection_reasons?.[0] || "Foto rejeitada"}`}
                   </p>
                 </div>
               </article>
@@ -270,16 +263,12 @@ export default function VisagismPage() {
         </div>
 
         {errorMessage ? (
-          <div className="mt-4 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
-            {errorMessage}
-          </div>
+          <div className="mt-4 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">{errorMessage}</div>
         ) : null}
 
         <div className="mt-auto pt-8">
           {Object.keys(uploaded).length > 0 && !allTriaged ? (
-            <div className="mb-3 rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
-              Pelo menos uma foto precisa ser refeita antes de continuar.
-            </div>
+            <div className="mb-3 rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">Pelo menos uma foto precisa ser refeita antes de continuar.</div>
           ) : null}
           <Button className="h-12 w-full text-base" disabled={!allSelected || isSubmitting} onClick={uploadAndTriage}>
             {isSubmitting ? "Enviando e validando..." : Object.keys(uploaded).length ? "Validar novamente" : "Enviar para análise"}
@@ -294,59 +283,14 @@ export default function VisagismPage() {
       <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col items-center justify-center bg-background px-6 text-center">
         <div className="h-12 w-12 animate-spin rounded-full border-4 border-muted border-t-primary" aria-hidden="true" />
         <h1 className="mt-6 text-2xl font-semibold">Analisando suas fotos</h1>
-        <p className="mt-3 text-sm leading-6 text-muted-foreground">
-          Estamos verificando rosto, cabelo, proporções e recomendações. Esta tela atualiza automaticamente.
-        </p>
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">Estamos verificando rosto, cabelo, proporções e recomendações. Esta tela atualiza automaticamente.</p>
         {analysisId ? <p className="mt-6 text-xs text-muted-foreground">Análise {analysisId.slice(0, 8)}</p> : null}
       </main>
     );
   }
 
-  if (step === "result") {
-    const hairstyles = Array.isArray(result?.recommended_hairstyles)
-      ? result.recommended_hairstyles.filter((item): item is string => typeof item === "string")
-      : [];
-    const primary = typeof result?.primary_hairstyle === "string" ? result.primary_hairstyle : hairstyles[0];
-    const faceShape = typeof result?.face_shape_category === "string" ? result.face_shape_category : null;
-
-    return (
-      <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col bg-background px-4 pb-8 pt-6">
-        <p className="text-sm font-medium text-muted-foreground">Resultado</p>
-        <h1 className="mt-1 text-2xl font-semibold">Sua análise foi concluída</h1>
-        {faceShape ? <p className="mt-3 text-sm text-muted-foreground">Formato identificado: {faceShape}</p> : null}
-
-        {primary ? (
-          <section className="mt-6 rounded-2xl border bg-card p-5">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Recomendação principal</p>
-            <h2 className="mt-2 text-xl font-semibold">{primary}</h2>
-          </section>
-        ) : (
-          <div className="mt-6 rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">
-            Não houve dados suficientes para uma recomendação principal nesta sessão.
-          </div>
-        )}
-
-        {hairstyles.length ? (
-          <section className="mt-6">
-            <h2 className="text-base font-semibold">Opções encontradas</h2>
-            <div className="mt-3 space-y-2">
-              {hairstyles.map((name, index) => (
-                <div key={`${name}-${index}`} className="rounded-xl border bg-card p-4">
-                  <p className="text-xs text-muted-foreground">Opção {index + 1}</p>
-                  <p className="mt-1 font-medium">{name}</p>
-                </div>
-              ))}
-            </div>
-          </section>
-        ) : null}
-
-        <div className="mt-auto pt-8">
-          <Button variant="outline" className="h-12 w-full" onClick={resetFlow}>
-            Fazer nova análise
-          </Button>
-        </div>
-      </main>
-    );
+  if (step === "result" && result) {
+    return <VisagismResultView result={result} analysisId={analysisId} onReset={resetFlow} />;
   }
 
   if (step === "error") {
@@ -354,9 +298,7 @@ export default function VisagismPage() {
       <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col items-center justify-center bg-background px-6 text-center">
         <h1 className="text-2xl font-semibold">Não foi possível concluir</h1>
         <p className="mt-3 text-sm leading-6 text-muted-foreground">{errorMessage}</p>
-        <Button className="mt-7 h-12 w-full" onClick={resetFlow}>
-          Tentar novamente
-        </Button>
+        <Button className="mt-7 h-12 w-full" onClick={resetFlow}>Tentar novamente</Button>
       </main>
     );
   }
@@ -364,15 +306,11 @@ export default function VisagismPage() {
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col bg-background px-5 pb-8 pt-10">
       <div className="flex flex-1 flex-col justify-center">
-        <div className="mb-7 flex h-20 w-20 items-center justify-center rounded-3xl border bg-muted text-3xl" aria-hidden="true">
-          ✂️
-        </div>
+        <div className="mb-7 flex h-20 w-20 items-center justify-center rounded-3xl border bg-muted text-3xl" aria-hidden="true">✂️</div>
 
         <p className="text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground">Vision</p>
         <h1 className="mt-3 text-3xl font-semibold tracking-tight">Descubra o corte que valoriza seu rosto</h1>
-        <p className="mt-4 text-base leading-7 text-muted-foreground">
-          Envie três fotos e receba uma análise baseada nas características reais do seu rosto e cabelo.
-        </p>
+        <p className="mt-4 text-base leading-7 text-muted-foreground">Envie três fotos e receba uma análise baseada nas características reais do seu rosto e cabelo.</p>
 
         <div className="mt-7 space-y-3 rounded-2xl border bg-card p-4 text-sm">
           <div className="flex items-center gap-3"><span className="font-semibold">1.</span><span>Frontal</span></div>
@@ -390,9 +328,7 @@ export default function VisagismPage() {
         >
           <option value="">{isLoadingProfiles ? "Carregando perfis..." : "Selecione um perfil"}</option>
           {profiles.map((profile) => (
-            <option key={profile.id} value={profile.id}>
-              {profile.artistic_name || profile.full_name}
-            </option>
+            <option key={profile.id} value={profile.id}>{profile.artistic_name || profile.full_name}</option>
           ))}
         </select>
 
@@ -402,10 +338,8 @@ export default function VisagismPage() {
       </div>
 
       <div className="pt-8">
-        <Button className="h-12 w-full text-base" onClick={() => setStep("upload")} disabled={!selectedProfileId}>
-          Começar agora
-        </Button>
-        <p className="mt-3 text-center text-xs text-muted-foreground">Fotos → triagem → análise</p>
+        <Button className="h-12 w-full text-base" onClick={() => setStep("upload")} disabled={!selectedProfileId}>Começar agora</Button>
+        <p className="mt-3 text-center text-xs text-muted-foreground">Fotos → triagem → análise → resultado</p>
       </div>
     </main>
   );
