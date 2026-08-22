@@ -208,46 +208,27 @@ jobs:
         with:
           sarif_file: "trivy-results.sarif"
 
-  # ==================== DEPLOY ====================
+  # ==================== DEPLOY PLACEHOLDERS ====================
   deploy-staging:
-    name: Deploy to Staging
+    name: Deploy to Staging (placeholder)
     runs-on: ubuntu-latest
     needs: [backend-test, frontend-build, security-scan]
     if: github.ref == 'refs/heads/develop'
     environment: staging
     steps:
-      - uses: actions/checkout@v4
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-      - name: Deploy to ECS Staging
+      - name: Deployment not configured yet
         run: |
-          echo "Deploying to staging..."
+          echo "Staging deployment is not configured yet."
+          echo "No cloud credentials are required until a real deployment target is wired."
 
   deploy-production:
-    name: Deploy to Production
+    name: Deploy to Production (placeholder)
     runs-on: ubuntu-latest
     needs: [backend-test, frontend-build, security-scan]
     if: github.ref == 'refs/heads/main'
     environment: production
     steps:
-      - uses: actions/checkout@v4
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-      - name: Deploy to ECS Production
+      - name: Deployment not configured yet
         run: |
-          echo "Deploying to production..."
-      - name: Notify Slack
-        uses: 8398a7/action-slack@v3
-        with:
-          status: ${{ job.status }}
-          channel: "#deployments"
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          echo "Production deployment is not configured yet."
+          echo "No AWS or Slack credentials are required until a real deployment target is wired."
