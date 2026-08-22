@@ -19,6 +19,15 @@ interface AuthState {
   logout: () => void;
 }
 
+const setAuthCookie = (authenticated: boolean) => {
+  if (typeof document === "undefined") return;
+  if (authenticated) {
+    document.cookie = "auth-storage=1; Path=/; Max-Age=2592000; SameSite=Lax; Secure";
+  } else {
+    document.cookie = "auth-storage=; Path=/; Max-Age=0; SameSite=Lax; Secure";
+  }
+};
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
@@ -27,8 +36,14 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       setUser: (user) => set({ user, isAuthenticated: !!user }),
       setToken: (token) => set({ token }),
-      login: (user, token) => set({ user, token, isAuthenticated: true }),
-      logout: () => set({ user: null, token: null, isAuthenticated: false }),
+      login: (user, token) => {
+        setAuthCookie(true);
+        set({ user, token, isAuthenticated: true });
+      },
+      logout: () => {
+        setAuthCookie(false);
+        set({ user: null, token: null, isAuthenticated: false });
+      },
     }),
     {
       name: "auth-storage",
