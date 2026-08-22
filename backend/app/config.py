@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     AWS_ACCESS_KEY_ID: str = ""
     AWS_SECRET_ACCESS_KEY: str = ""
     AWS_REGION: str = "us-east-1"
-    AWS_REKOGNITION_ENABLED: bool = True
+    AWS_REKOGNITION_ENABLED: bool = False
     S3_BUCKET: str = "vision-ai-casting"
     S3_ENDPOINT: str = ""
 
@@ -53,8 +53,12 @@ class Settings(BaseSettings):
     EMAIL_FROM: str = "noreply@visionaicasting.com"
     EMAIL_API_KEY: str = ""
 
-    FRONTEND_URL: str = "http://localhost:3000"
-    CORS_ORIGINS: list = ["http://localhost:3000", "http://localhost:3001"]
+    FRONTEND_URL: str = "https://vision-web-eight.vercel.app"
+    CORS_ORIGINS: list = [
+        "https://vision-web-eight.vercel.app",
+        "http://localhost:3000",
+        "http://localhost:3001",
+    ]
 
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "json"
