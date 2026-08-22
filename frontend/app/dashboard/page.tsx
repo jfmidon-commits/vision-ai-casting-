@@ -1,16 +1,16 @@
 "use client";
 
+import Link from "next/link";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Users, Camera, Brain, FileText, TrendingUp, Activity } from "lucide-react";
+import { Users, Camera, Brain, FileText } from "lucide-react";
 
 const stats = [
-  { name: "Total de Perfis", value: "124", icon: Users, change: "+12%", trend: "up" },
-  { name: "Ensaios este mês", value: "38", icon: Camera, change: "+8%", trend: "up" },
-  { name: "Análises de IA", value: "256", icon: Brain, change: "+24%", trend: "up" },
-  { name: "Relatórios gerados", value: "89", icon: FileText, change: "+15%", trend: "up" },
+  { name: "Total de Perfis", value: "124", icon: Users, change: "+12%" },
+  { name: "Ensaios este mês", value: "38", icon: Camera, change: "+8%" },
+  { name: "Análises de IA", value: "256", icon: Brain, change: "+24%" },
+  { name: "Relatórios gerados", value: "89", icon: FileText, change: "+15%" },
 ];
 
 const recentActivity = [
@@ -24,15 +24,17 @@ export default function DashboardPage() {
   return (
     <DashboardShell>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
             <p className="text-muted-foreground">Visão geral da sua agência</p>
           </div>
-          <Button>Novo Perfil</Button>
+          <Link href="/profiles">
+            <Button className="w-full sm:w-auto">Novo Perfil</Button>
+          </Link>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {stats.map((stat) => {
             const Icon = stat.icon;
             return (
@@ -54,9 +56,7 @@ export default function DashboardPage() {
 
         <div className="grid gap-4 md:grid-cols-2">
           <Card>
-            <CardHeader>
-              <CardTitle>Atividade Recente</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle>Atividade Recente</CardTitle></CardHeader>
             <CardContent>
               <div className="space-y-4">
                 {recentActivity.map((activity) => (
@@ -74,38 +74,19 @@ export default function DashboardPage() {
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Uso do Plano</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle>Uso do Plano</CardTitle></CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div>
-                  <div className="flex justify-between text-sm">
-                    <span>Perfis</span>
-                    <span className="font-medium">124 / 500</span>
+                {[
+                  ["Perfis", "124 / 500", "25%"],
+                  ["Análises", "256 / 1000", "26%"],
+                  ["Armazenamento", "45GB / 100GB", "45%"],
+                ].map(([label, value, width]) => (
+                  <div key={label}>
+                    <div className="flex justify-between text-sm"><span>{label}</span><span className="font-medium">{value}</span></div>
+                    <div className="mt-2 h-2 rounded-full bg-secondary"><div className="h-2 rounded-full bg-primary" style={{ width }} /></div>
                   </div>
-                  <div className="mt-2 h-2 rounded-full bg-secondary">
-                    <div className="h-2 rounded-full bg-primary" style={{ width: "25%" }} />
-                  </div>
-                </div>
-                <div>
-                  <div className="flex justify-between text-sm">
-                    <span>Análises</span>
-                    <span className="font-medium">256 / 1000</span>
-                  </div>
-                  <div className="mt-2 h-2 rounded-full bg-secondary">
-                    <div className="h-2 rounded-full bg-primary" style={{ width: "26%" }} />
-                  </div>
-                </div>
-                <div>
-                  <div className="flex justify-between text-sm">
-                    <span>Armazenamento</span>
-                    <span className="font-medium">45GB / 100GB</span>
-                  </div>
-                  <div className="mt-2 h-2 rounded-full bg-secondary">
-                    <div className="h-2 rounded-full bg-primary" style={{ width: "45%" }} />
-                  </div>
-                </div>
+                ))}
               </div>
             </CardContent>
           </Card>
