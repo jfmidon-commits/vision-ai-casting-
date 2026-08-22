@@ -1,15 +1,52 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
-from typing import List, Optional
+from typing import Optional
 from uuid import UUID
 
 from app.database import get_db
-from app.models import Profile, Photoshoot, Analysis, Report
-from app.schemas import ProfileCreate, ProfileUpdate, ProfileResponse, APIResponse, PaginatedResponse
+from app.models import Profile
+from app.schemas import ProfileCreate, ProfileUpdate, APIResponse, PaginatedResponse
 from app.middleware.auth import get_current_user, require_role
 
 router = APIRouter(prefix="/api/v1/profiles", tags=["profiles"])
+
+
+def profile_payload(profile: Profile) -> dict:
+    return {
+        "id": str(profile.id),
+        "tenant_id": str(profile.tenant_id),
+        "code": profile.code,
+        "full_name": profile.full_name,
+        "artistic_name": profile.artistic_name,
+        "birth_date": profile.birth_date,
+        "gender": profile.gender,
+        "height_cm": profile.height_cm,
+        "weight_kg": profile.weight_kg,
+        "eye_color": profile.eye_color,
+        "hair_color": profile.hair_color,
+        "skin_tone": profile.skin_tone,
+        "body_type": profile.body_type,
+        "shoe_size": profile.shoe_size,
+        "dress_size": profile.dress_size,
+        "pants_size": profile.pants_size,
+        "shirt_size": profile.shirt_size,
+        "languages": profile.languages or [],
+        "skills": profile.skills or [],
+        "experience_years": profile.experience_years,
+        "bio": profile.bio,
+        "instagram": profile.instagram,
+        "portfolio_url": profile.portfolio_url,
+        "status": profile.status,
+        "metadata": profile._metadata or {},
+        "created_at": profile.created_at,
+        "updated_at": profile.updated_at,
+        "age": None,
+        "photoshoot_count": 0,
+        "latest_analysis": None,
+        "latest_report": None,
+    }
+
 
 @router.get("", response_model=PaginatedResponse)
 async def list_profiles(
@@ -30,17 +67,20 @@ async def list_profiles(
         )
 
     total_result = await db.execute(select(func.count()).select_from(query.subquery()))
-    total = total_result.scalar()
+    total = total_result.scalar() or 0
 
     query = query.offset((page - 1) * per_page).limit(per_page)
     result = await db.execute(query)
     profiles = result.scalars().all()
 
     return PaginatedResponse(
-        data=[ProfileResponse.model_validate(p) for p in profiles],
-        total=total, page=page, per_page=per_page,
-        total_pages=(total + per_page - 1) // per_page
+        data=[profile_payload(p) for p in profiles],
+        total=total,
+        page=page,
+        per_page=per_page,
+        total_pages=(total + per_page - 1) // per_page,
     )
+
 
 @router.post("", response_model=APIResponse, status_code=status.HTTP_201_CREATED)
 async def create_profile(
@@ -52,7 +92,8 @@ async def create_profile(
     db.add(db_profile)
     await db.commit()
     await db.refresh(db_profile)
-    return APIResponse(data=ProfileResponse.model_validate(db_profile), message="Profile created")
+    return APIResponse(data=profile_payload(db_profile), message="Profile created")
+
 
 @router.get("/{profile_id}", response_model=APIResponse)
 async def get_profile(
@@ -68,7 +109,8 @@ async def get_profile(
     profile = result.scalar_one_or_none()
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
-    return APIResponse(data=ProfileResponse.model_validate(profile))
+    return APIResponse(data=profile_payload(profile))
+
 
 @router.put("/{profile_id}", response_model=APIResponse)
 async def update_profile(
@@ -91,7 +133,8 @@ async def update_profile(
 
     await db.commit()
     await db.refresh(profile)
-    return APIResponse(data=ProfileResponse.model_validate(profile), message="Profile updated")
+    return APIResponse(data=profile_payload(profile), message="Profile updated")
+
 
 @router.delete("/{profile_id}", response_model=APIResponse)
 async def delete_profile(
