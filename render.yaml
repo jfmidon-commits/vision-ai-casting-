@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: vision-ai-casting-api
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: FRONTEND_URL
+        value: https://vision-web-eight.vercel.app
+      - key: CORS_ORIGINS
+        value: '["https://vision-web-eight.vercel.app"]'
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: AWS_REKOGNITION_ENABLED
+        value: "false"
