@@ -1,24 +1,54 @@
 from datetime import datetime, timedelta
+import base64
+import hashlib
+import hmac
 import re
+import secrets
 from uuid import uuid4
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.config import settings
 from app.models import User, Tenant
 from app.schemas import Token
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+PBKDF2_ITERATIONS = 390000
 
 class AuthService:
     @staticmethod
     def verify_password(plain_password: str, hashed_password: str) -> bool:
-        return bool(hashed_password) and pwd_context.verify(plain_password, hashed_password)
+        if not hashed_password:
+            return False
+        try:
+            scheme, iterations, salt_b64, digest_b64 = hashed_password.split("$", 3)
+            if scheme != "pbkdf2_sha256":
+                return False
+            salt = base64.b64decode(salt_b64.encode("ascii"))
+            expected = base64.b64decode(digest_b64.encode("ascii"))
+            actual = hashlib.pbkdf2_hmac(
+                "sha256",
+                plain_password.encode("utf-8"),
+                salt,
+                int(iterations),
+            )
+            return hmac.compare_digest(actual, expected)
+        except (ValueError, TypeError):
+            return False
 
     @staticmethod
     def get_password_hash(password: str) -> str:
-        return pwd_context.hash(password)
+        salt = secrets.token_bytes(16)
+        digest = hashlib.pbkdf2_hmac(
+            "sha256",
+            password.encode("utf-8"),
+            salt,
+            PBKDF2_ITERATIONS,
+        )
+        return "pbkdf2_sha256${}${}${}".format(
+            PBKDF2_ITERATIONS,
+            base64.b64encode(salt).decode("ascii"),
+            base64.b64encode(digest).decode("ascii"),
+        )
 
     @staticmethod
     def create_access_token(data: dict, expires_delta: timedelta = None):
