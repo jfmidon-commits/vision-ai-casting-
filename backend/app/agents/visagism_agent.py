@@ -10,10 +10,8 @@ from typing import Dict, List, Optional
 from app.agents.base import AgentCapability, AgentContext, AgentResult, VisionAgent
 from app.ai.image_triage.engine import ImageTriageEngine, TriageCategory
 from app.ai.visagism.analyzer import VisagismAnalyzer
-from app.ai.visagism.card_photo_guard import (
-    CardPhotoGuardError,
-    DEFAULT_CARD_PHOTO_GUARD,
-)
+from app.ai.visagism.card_photo_guard import CardPhotoGuardError, DEFAULT_CARD_PHOTO_GUARD
+from app.ai.visagism.interpretation import build_visagism_interpretation
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +48,6 @@ class VisagismAgent(VisionAgent):
                     message="Nenhuma foto fornecida para análise",
                 )
 
-            # Fail closed before analysis/card generation: every successful
-            # visagism result must have a proven real source photo.
             try:
                 card_media = DEFAULT_CARD_PHOTO_GUARD.build_card_media(photos=photos)
             except CardPhotoGuardError as exc:
@@ -65,18 +61,13 @@ class VisagismAgent(VisionAgent):
                     message="É obrigatória uma foto real da pessoa para gerar o card",
                 )
 
-            # ------------------------------------------------------------------
-            # TRIAGEM OBRIGATÓRIA (P0)
-            # Nenhuma foto REJECTED / UNKNOWN segue para análise.
-            # ------------------------------------------------------------------
             triage_results = []
             approved_photos = []
 
             for photo in photos:
                 path = photo.get("path") or photo.get("url")
                 triage_entry = {
-                    "filename": photo.get("filename")
-                    or (os.path.basename(path) if path else "unknown"),
+                    "filename": photo.get("filename") or (os.path.basename(path) if path else "unknown"),
                     "category": TriageCategory.UNKNOWN.value,
                     "confidence": 0.0,
                     "selected": False,
@@ -92,17 +83,13 @@ class VisagismAgent(VisionAgent):
                         "selected": result.selected,
                         "rejection_reasons": result.rejection_reasons or [],
                     }
-
-                    if (
-                        result.selected
-                        and result.category
-                        not in (TriageCategory.REJECTED, TriageCategory.UNKNOWN)
+                    if result.selected and result.category not in (
+                        TriageCategory.REJECTED,
+                        TriageCategory.UNKNOWN,
                     ):
                         approved_photos.append(photo)
                 else:
-                    triage_entry["rejection_reasons"] = [
-                        "path_not_accessible_for_triage"
-                    ]
+                    triage_entry["rejection_reasons"] = ["path_not_accessible_for_triage"]
                     triage_entry["selected"] = False
 
                 triage_results.append(triage_entry)
@@ -117,21 +104,19 @@ class VisagismAgent(VisionAgent):
                         "placeholders": ["no_photos_passed_triage"],
                         "limitations": ["all_photos_rejected_by_triage"],
                     },
-                    message="Nenhuma foto foi aprovada na triagem automática. "
-                    "Envie fotos frontais, ¾ ou perfil com rosto visível.",
+                    message="Nenhuma foto foi aprovada na triagem automática. Envie fotos frontais, ¾ ou perfil com rosto visível.",
                 )
 
             analysis_context = {
                 "parallel_results": context.input_data.get("parallel_results") or {},
                 "triage_results": triage_results,
             }
-
-            analysis = await self.analyzer.analyze(
-                approved_photos, context=analysis_context
-            )
+            analysis = await self.analyzer.analyze(approved_photos, context=analysis_context)
+            interpretation = build_visagism_interpretation(analysis)
 
             data = {
                 "analysis": analysis,
+                "interpretation": interpretation,
                 "confidence": analysis.get("confidence", 0.5),
                 "recommendations": {
                     "hairstyles": analysis.get("recommended_hairstyles", []),
@@ -161,11 +146,7 @@ class VisagismAgent(VisionAgent):
                 data["placeholders"].append("analysis_error")
                 data["limitations"].append(f"Erro: {analysis['error']}")
 
-            return AgentResult(
-                success=True,
-                data=data,
-                message="Análise de visagismo concluída",
-            )
+            return AgentResult(success=True, data=data, message="Análise de visagismo concluída")
 
         except Exception as e:
             logger.exception("Erro no VisagismAgent")
