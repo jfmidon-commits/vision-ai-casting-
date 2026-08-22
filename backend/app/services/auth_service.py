@@ -91,9 +91,10 @@ class AuthService:
             raise ValueError("Email already registered")
 
         local_part = user_data.email.split("@", 1)[0]
+        display_name = getattr(user_data, "name", None) or local_part
         safe_slug = re.sub(r"[^a-z0-9]+", "-", local_part.lower()).strip("-") or "user"
         tenant = Tenant(
-            name=f"{user_data.name or local_part} Workspace",
+            name=f"{display_name} Workspace",
             slug=f"{safe_slug}-{uuid4().hex[:8]}",
             plan="starter",
         )
@@ -102,7 +103,7 @@ class AuthService:
 
         user = User(
             email=user_data.email,
-            name=user_data.name or local_part,
+            name=display_name,
             tenant_id=tenant.id,
             role="admin",
         )
