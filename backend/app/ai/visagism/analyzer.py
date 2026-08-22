@@ -98,16 +98,33 @@ class VisagismAnalyzer:
 
         facial = parallel.get("facial_structure") or parallel.get("facial") or {}
         if isinstance(facial, dict) and facial:
-            measured["face_shape"] = (
-                facial.get("face_shape")
-                or facial.get("shape")
-                or facial.get("face_shape_category")
+            # P0.1-B: mock/fallback do FacialAnalyzer NUNCA conta como medido
+            sources = facial.get("sources") or {}
+            is_mock = (
+                facial.get("is_mock") is True
+                or facial.get("source") == "mock"
+                or (
+                    isinstance(sources, dict)
+                    and bool(sources)
+                    and all(v == "mock" for v in sources.values())
+                )
             )
-            measured["face_proportions"] = facial.get("proportions") or facial.get(
-                "face_proportions"
-            )
-            if not measured["face_shape"]:
+            if is_mock:
+                measured["_limitations"].append("facial_result_is_mock")
                 measured["_limitations"].append("face_shape_not_measured")
+            else:
+                measured["face_shape"] = (
+                    facial.get("face_shape")
+                    or facial.get("shape")
+                    or facial.get("face_shape_category")
+                )
+                measured["face_proportions"] = (
+                    facial.get("proportions")
+                    or facial.get("face_proportions")
+                    or facial.get("facial_thirds")
+                )
+                if not measured["face_shape"]:
+                    measured["_limitations"].append("face_shape_not_measured")
         else:
             measured["_limitations"].append("facial_analyzer_not_available")
 
@@ -232,19 +249,50 @@ FORMATO JSON OBRIGATÓRIO:
     def _normalize_output(
         self, result: Dict, measured: Dict, limitations: List[str]
     ) -> Dict:
+        # P0.1-E: never invent cut names that look like real recommendations
         hairstyles = result.get("recommended_hairstyles") or []
         if not isinstance(hairstyles, list):
             hairstyles = []
-        while len(hairstyles) < 5:
-            hairstyles.append(f"Opção complementar {len(hairstyles) + 1}")
-        hairstyles = hairstyles[:5]
+        cleaned = []
+        for h in hairstyles:
+            if not isinstance(h, str):
+                continue
+            name = h.strip()
+            if not name:
+                continue
+            lower = name.lower()
+            if "opção complementar" in lower or "opcao complementar" in lower:
+                continue
+            cleaned.append(name)
+        hairstyles = cleaned[:5]
         result["recommended_hairstyles"] = hairstyles
 
-        if not result.get("primary_hairstyle"):
-            result["primary_hairstyle"] = hairstyles[0] if hairstyles else "Não determinado"
+        if len(hairstyles) < 5:
+            limitations = list(limitations) + [
+                f"fewer_than_5_grounded_hairstyles:{len(hairstyles)}"
+            ]
+
+        # P0.1-F: primary must belong to real recommendations
+        primary = result.get("primary_hairstyle")
+        if isinstance(primary, str):
+            primary = primary.strip()
+        if primary and primary in hairstyles:
+            result["primary_hairstyle"] = primary
+        elif hairstyles:
+            result["primary_hairstyle"] = hairstyles[0]
+            if primary and primary not in hairstyles:
+                limitations = list(limitations) + [
+                    "primary_hairstyle_not_in_recommendations"
+                ]
+        else:
+            result["primary_hairstyle"] = None
+            limitations = list(limitations) + ["no_grounded_hairstyles"]
+
         if not result.get("primary_justification"):
             result["primary_justification"] = (
                 "Justificativa gerada a partir dos dados medidos disponíveis."
+                if hairstyles
+                else None
             )
 
         current = result.get("current_hair") or {}
@@ -324,15 +372,9 @@ FORMATO JSON OBRIGATÓRIO:
         return {
             "face_shape_category": measured.get("face_shape") or "desconhecido",
             "face_shape_description": "Análise indisponível no momento.",
-            "recommended_hairstyles": [
-                "Corte em camadas",
-                "Degradê médio",
-                "Top volume",
-                "Lateral baixa",
-                "Texturizado curto",
-            ],
-            "primary_hairstyle": "Corte em camadas",
-            "primary_justification": "Fallback: dados insuficientes para personalização completa.",
+            "recommended_hairstyles": [],
+            "primary_hairstyle": None,
+            "primary_justification": None,
             "current_hair": {
                 "summary": "Não foi possível medir o cabelo atual.",
                 "density": measured.get("hair_density") or "não medido",
@@ -345,7 +387,7 @@ FORMATO JSON OBRIGATÓRIO:
                 "skin_undertone": measured.get("skin_undertone"),
                 "symmetry": measured.get("symmetry"),
             },
-            "limitations": limitations + [f"error: {error_msg}"],
+            "limitations": list(limitations) + [f"error: {error_msg}", "fallback_no_llm_recommendations"],
             "recommended_eyebrow_shapes": ["Arco suave"],
             "recommended_makeup_styles": ["Natural"],
             "contouring_tips": [],
