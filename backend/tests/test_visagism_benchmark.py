@@ -88,8 +88,10 @@ class TestProtocolCoverage:
             pytest.skip("Dataset não disponível")
 
         results = engine.process_dataset(dataset_path)
-        frontal_results = [r for r in results 
-                          if r.category in (TriageCategory.FRONTAL, TriageCategory.FRONTAL_CLOSE)]
+        frontal_results = [
+            r for r in results
+            if r.category in (TriageCategory.FRONTAL, TriageCategory.FRONTAL_CLOSE)
+        ]
         assert len(frontal_results) > 0, "Nenhuma foto frontal detectada"
 
     def test_three_quarter_left_detected(self, engine, dataset_path):
@@ -180,7 +182,7 @@ class TestQuality:
         results = engine.process_dataset(dataset_path)
         for r in results:
             if r.category == TriageCategory.REJECTED:
-                assert len(r.rejection_reasons) > 0,                     f"{r.filename}: Rejeitada sem motivo explícito"
+                assert len(r.rejection_reasons) > 0, f"{r.filename}: Rejeitada sem motivo explícito"
 
     def test_scores_between_zero_and_one(self, engine, dataset_path):
         """B.3: Scores devem estar entre 0 e 1."""
@@ -189,7 +191,7 @@ class TestQuality:
 
         results = engine.process_dataset(dataset_path)
         for r in results:
-            assert 0.0 <= r.confidence <= 1.0,                 f"{r.filename}: confidence {r.confidence} fora de [0,1]"
+            assert 0.0 <= r.confidence <= 1.0, f"{r.filename}: confidence {r.confidence} fora de [0,1]"
 
 
 # ============================================================================
@@ -200,14 +202,21 @@ class TestVisagismAgent:
     """Testa o VisagismAgent."""
 
     @pytest.mark.asyncio
-    async def test_valid_json_output(self):
-        """C.1: Saída deve ser JSON válido."""
+    async def test_valid_json_output(self, dataset_path):
+        """C.1: Saída deve ser JSON válido usando foto real aprovada na triagem."""
+        if not os.path.exists(dataset_path):
+            pytest.skip("Dataset não disponível")
+
+        image_path = os.path.join(dataset_path, "02_frontal_neutra.jpg")
+        if not os.path.exists(image_path):
+            pytest.skip("Imagem frontal do benchmark não disponível")
+
         agent = VisagismAgent()
         context = AgentContext(
             user_id=uuid4(),
             tenant_id=uuid4(),
             intent="ANALYZE_VISAGISM",
-            input_data={"photos": [{"url": "test.jpg"}]}
+            input_data={"photos": [{"url": image_path}]},
         )
         result = await agent.execute(context)
         assert result.success
@@ -246,7 +255,7 @@ class TestHaircuts:
         result = await analyzer.analyze_single({"url": "test.jpg"})
 
         hairstyles = result.get("recommended_hairstyles", [])
-        assert len(hairstyles) >= 2,             f"Apenas {len(hairstyles)} cortes recomendados"
+        assert len(hairstyles) >= 2, f"Apenas {len(hairstyles)} cortes recomendados"
 
 
 # ============================================================================
@@ -265,7 +274,7 @@ class TestKnownBugs:
         posterior_results = [r for r in results if r.category == TriageCategory.POSTERIOR]
 
         for r in posterior_results:
-            assert "Nenhuma face detectada" not in str(r.rejection_reasons),                 "Posterior incorretamente marcado como NO_FACE"
+            assert "Nenhuma face detectada" not in str(r.rejection_reasons), "Posterior incorretamente marcado como NO_FACE"
 
     def test_half_body_classification_exists(self, engine):
         """E.2: Classificação HALF_BODY deve existir."""
@@ -330,14 +339,18 @@ class TestBenchmarkSummary:
 
         criteria = {
             "protocolo_088": protocol_coverage >= 0.88,
-            "frontal": any(r.category in (TriageCategory.FRONTAL, TriageCategory.FRONTAL_CLOSE) 
-                          for r in selected),
-            "dois_perfis": len([r for r in selected 
-                               if r.category in (TriageCategory.PROFILE_LEFT, 
-                                                TriageCategory.PROFILE_RIGHT)]) >= 2,
-            "dois_tres_quartos": len([r for r in selected 
-                                     if r.category in (TriageCategory.THREE_QUARTER_LEFT,
-                                                      TriageCategory.THREE_QUARTER_RIGHT)]) >= 2,
+            "frontal": any(
+                r.category in (TriageCategory.FRONTAL, TriageCategory.FRONTAL_CLOSE)
+                for r in selected
+            ),
+            "dois_perfis": len([
+                r for r in selected
+                if r.category in (TriageCategory.PROFILE_LEFT, TriageCategory.PROFILE_RIGHT)
+            ]) >= 2,
+            "dois_tres_quartos": len([
+                r for r in selected
+                if r.category in (TriageCategory.THREE_QUARTER_LEFT, TriageCategory.THREE_QUARTER_RIGHT)
+            ]) >= 2,
             "posterior": any(r.category == TriageCategory.POSTERIOR for r in selected),
             "sorriso": any(r.category == TriageCategory.SMILING for r in selected),
             "hairline": any(r.category == TriageCategory.HAIRLINE for r in selected),
@@ -417,19 +430,21 @@ class TestEndToEnd:
             try:
                 analysis = await analyzer.analyze_single({
                     "path": os.path.join(dataset_path, result.filename),
-                    "category": category.value
+                    "category": category.value,
                 })
                 visagism_results[category.value] = analysis
             except Exception as e:
                 visagism_results[category.value] = {
                     "error": str(e),
                     "confidence": 0.0,
-                    "fallback": True
+                    "fallback": True,
                 }
 
         # 3. Salvar
-        save_json(visagism_results, 
-                 os.path.join(benchmark_output_dir, "visagism_result.json"))
+        save_json(
+            visagism_results,
+            os.path.join(benchmark_output_dir, "visagism_result.json"),
+        )
 
         # 4. Relatório
         report = "# Relatório de Visagismo - Dataset 001\n\n"
