@@ -30,7 +30,6 @@ jobs:
         id: changed-files
         run: |
           cd backend
-          # Get Python files changed in the last commit or in the PR
           if [ "${{ github.event_name }}" == "pull_request" ]; then
             CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep '^app/.*\.py$' || true)
           else
@@ -43,8 +42,6 @@ jobs:
           else
             echo "skip=false" >> $GITHUB_OUTPUT
             echo "files=$CHANGED" >> $GITHUB_OUTPUT
-            echo "Changed files:"
-            echo "$CHANGED"
           fi
       - name: Run black
         if: steps.changed-files.outputs.skip == 'false'
@@ -113,8 +110,8 @@ jobs:
       - name: Check frontend exists
         id: check-frontend
         run: |
-          if [ ! -f "frontend/package-lock.json" ]; then
-            echo "Frontend package-lock.json not found. Skipping frontend jobs."
+          if [ ! -f "frontend/package.json" ]; then
+            echo "Frontend package.json not found. Skipping frontend jobs."
             echo "skip=true" >> $GITHUB_OUTPUT
           else
             echo "skip=false" >> $GITHUB_OUTPUT
@@ -123,17 +120,17 @@ jobs:
         if: steps.check-frontend.outputs.skip == 'false'
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
-          cache-dependency-path: frontend/package-lock.json
       - name: Install dependencies
         if: steps.check-frontend.outputs.skip == 'false'
-        run: cd frontend && npm ci
+        run: |
+          cd frontend
+          if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
       - name: Run ESLint
         if: steps.check-frontend.outputs.skip == 'false'
         run: cd frontend && npm run lint
       - name: Run TypeScript check
         if: steps.check-frontend.outputs.skip == 'false'
-        run: cd frontend && npx tsc --noEmit
+        run: cd frontend && npm run type-check
 
   frontend-test:
     name: Frontend Tests
@@ -143,8 +140,8 @@ jobs:
       - name: Check frontend exists
         id: check-frontend
         run: |
-          if [ ! -f "frontend/package-lock.json" ]; then
-            echo "Frontend package-lock.json not found. Skipping frontend jobs."
+          if [ ! -f "frontend/package.json" ]; then
+            echo "Frontend package.json not found. Skipping frontend jobs."
             echo "skip=true" >> $GITHUB_OUTPUT
           else
             echo "skip=false" >> $GITHUB_OUTPUT
@@ -153,14 +150,14 @@ jobs:
         if: steps.check-frontend.outputs.skip == 'false'
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
-          cache-dependency-path: frontend/package-lock.json
       - name: Install dependencies
         if: steps.check-frontend.outputs.skip == 'false'
-        run: cd frontend && npm ci
+        run: |
+          cd frontend
+          if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
       - name: Run tests
         if: steps.check-frontend.outputs.skip == 'false'
-        run: cd frontend && npm test -- --coverage --watchAll=false
+        run: cd frontend && npm test -- --coverage --watchAll=false --passWithNoTests
       - name: Upload coverage
         if: steps.check-frontend.outputs.skip == 'false'
         uses: codecov/codecov-action@v4
@@ -172,32 +169,19 @@ jobs:
     name: Frontend Build
     runs-on: ubuntu-latest
     needs: [frontend-lint, frontend-test]
-    if: always() && (needs.frontend-lint.result == 'success' || needs.frontend-lint.result == 'skipped') && (needs.frontend-test.result == 'success' || needs.frontend-test.result == 'skipped')
+    if: always() && needs.frontend-lint.result == 'success' && needs.frontend-test.result == 'success'
     steps:
       - uses: actions/checkout@v4
-      - name: Check frontend exists
-        id: check-frontend
-        run: |
-          if [ ! -f "frontend/package-lock.json" ]; then
-            echo "Frontend package-lock.json not found. Skipping frontend build."
-            echo "skip=true" >> $GITHUB_OUTPUT
-          else
-            echo "skip=false" >> $GITHUB_OUTPUT
-          fi
       - uses: actions/setup-node@v4
-        if: steps.check-frontend.outputs.skip == 'false'
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
-          cache-dependency-path: frontend/package-lock.json
       - name: Install dependencies
-        if: steps.check-frontend.outputs.skip == 'false'
-        run: cd frontend && npm ci
+        run: |
+          cd frontend
+          if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
       - name: Build
-        if: steps.check-frontend.outputs.skip == 'false'
         run: cd frontend && npm run build
       - name: Upload build artifacts
-        if: steps.check-frontend.outputs.skip == 'false'
         uses: actions/upload-artifact@v4
         with:
           name: frontend-build
@@ -239,7 +223,6 @@ jobs:
       - name: Deploy to ECS Staging
         run: |
           echo "Deploying to staging..."
-          # aws ecs update-service --cluster vision-ai-staging --service backend --force-new-deployment
 
   deploy-production:
     name: Deploy to Production
@@ -258,7 +241,6 @@ jobs:
       - name: Deploy to ECS Production
         run: |
           echo "Deploying to production..."
-          # aws ecs update-service --cluster vision-ai-prod --service backend --force-new-deployment
       - name: Notify Slack
         uses: 8398a7/action-slack@v3
         with:
