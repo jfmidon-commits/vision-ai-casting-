@@ -99,8 +99,8 @@ async def test_missing_engines_produce_limitations(analyzer):
 
 
 @pytest.mark.asyncio
-async def test_exactly_five_hairstyles(analyzer):
-    """Sempre retorna exatamente 5 cortes."""
+async def test_does_not_pad_fake_cuts(analyzer):
+    """P0.1-E: não completa com cortes inventados."""
     fake_llm = {
         "recommended_hairstyles": ["A", "B"],  # LLM devolveu só 2
         "primary_hairstyle": "A",
@@ -111,7 +111,8 @@ async def test_exactly_five_hairstyles(analyzer):
     analyzer.client.chat.completions.create = AsyncMock(return_value=mock_resp)
 
     result = await analyzer.analyze_single({"id": "1"}, context={})
-    assert len(result["recommended_hairstyles"]) == 5
+    assert len(result["recommended_hairstyles"]) == 2
+    assert all("complementar" not in s.lower() for s in result["recommended_hairstyles"])
 
 
 @pytest.mark.asyncio
