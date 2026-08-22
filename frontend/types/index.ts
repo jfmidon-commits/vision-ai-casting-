@@ -93,13 +93,74 @@ export interface SimulationPreflightResult {
   card_media: VisagismCardMedia;
 }
 
+export interface VisagismPrimaryRecommendation {
+  name: string;
+  why_it_works: string;
+  visual_effect: string;
+  professional_positioning: string;
+  maintenance_level: "baixo" | "médio" | "alto" | "não determinado" | string;
+  barber_instruction: string;
+}
+
+export interface VisagismAlternativeRecommendation {
+  name: string;
+  why_it_works: string;
+  best_use_case: string;
+  maintenance_level: "baixo" | "médio" | "alto" | "não determinado" | string;
+}
+
+export interface BarberBrief {
+  recommendation_name: string | null;
+  grounded_in: string[];
+  top: string;
+  sides: string;
+  back: string;
+  fringe: string;
+  texture: string;
+  finish: string;
+  avoid: string;
+  note: string;
+}
+
+export interface VisagismInterpretation {
+  status: "ready" | "insufficient_grounded_data";
+  executive_summary: string;
+  current_hair_assessment: {
+    summary: string;
+    strengths: string[];
+    attention_points: string[];
+  };
+  primary_recommendation: VisagismPrimaryRecommendation | null;
+  alternative_hairstyles: VisagismAlternativeRecommendation[];
+  barber_brief: BarberBrief;
+  professional_image: {
+    actor_casting: string;
+    commercial_model: string;
+    corporate_institutional: string;
+    lifestyle_advertising: string;
+  };
+  limitations: string[];
+  confidence_note: string;
+}
+
+export interface VisagismResult {
+  face_shape_category?: string;
+  recommended_hairstyles?: string[];
+  primary_hairstyle?: string | null;
+  primary_justification?: string | null;
+  current_hair?: Record<string, unknown>;
+  measured_data_used?: Record<string, unknown>;
+  limitations?: string[];
+  interpretation?: VisagismInterpretation;
+}
+
 export interface Analysis {
   id: string;
   status: string;
   confidence_score?: number;
-  facial_structure?: any;
-  visagism?: any;
-  casting?: any;
+  facial_structure?: unknown;
+  visagism?: VisagismResult;
+  casting?: unknown;
   card_media?: VisagismCardMedia;
   created_at: string;
 }
