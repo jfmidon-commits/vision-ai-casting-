@@ -1,4 +1,8 @@
-"""VisagismAgent - Análise de visagismo e recomendações de estilo."""
+"""VisagismAgent - Análise de visagismo e recomendações de estilo.
+
+P0: Triagem obrigatória. Fotos reprovadas não seguem para análise.
+Consome motores reais via context passado ao VisagismAnalyzer.
+"""
 import logging
 import os
 from typing import Dict, List, Optional
@@ -28,7 +32,11 @@ class VisagismAgent(VisionAgent):
         self.triage_engine = ImageTriageEngine()
 
     def can_handle(self, context: AgentContext) -> bool:
-        return context.intent in ["ANALYZE_VISAGISM", "STYLE_RECOMMENDATION", "TRIAGE_AND_ANALYZE"]
+        return context.intent in [
+            "ANALYZE_VISAGISM",
+            "STYLE_RECOMMENDATION",
+            "TRIAGE_AND_ANALYZE",
+        ]
 
     async def execute(self, context: AgentContext) -> AgentResult:
         self._increment_execution()
@@ -57,40 +65,92 @@ class VisagismAgent(VisionAgent):
                     message="É obrigatória uma foto real da pessoa para gerar o card",
                 )
 
-            # Triagem primeiro
+            # ------------------------------------------------------------------
+            # TRIAGEM OBRIGATÓRIA (P0)
+            # Nenhuma foto REJECTED / UNKNOWN segue para análise.
+            # ------------------------------------------------------------------
             triage_results = []
+            approved_photos = []
+
             for photo in photos:
                 path = photo.get("path") or photo.get("url")
+                triage_entry = {
+                    "filename": photo.get("filename")
+                    or (os.path.basename(path) if path else "unknown"),
+                    "category": TriageCategory.UNKNOWN.value,
+                    "confidence": 0.0,
+                    "selected": False,
+                    "rejection_reasons": [],
+                }
+
                 if path and os.path.exists(path):
                     result = self.triage_engine.process_image(path)
-                    triage_results.append(
-                        {
-                            "filename": result.filename,
-                            "category": result.category.value,
-                            "confidence": result.confidence,
-                            "selected": result.selected,
-                        }
-                    )
+                    triage_entry = {
+                        "filename": result.filename,
+                        "category": result.category.value,
+                        "confidence": result.confidence,
+                        "selected": result.selected,
+                        "rejection_reasons": result.rejection_reasons or [],
+                    }
 
-            # Análise de visagismo
-            analysis = await self.analyzer.analyze(photos)
+                    if (
+                        result.selected
+                        and result.category
+                        not in (TriageCategory.REJECTED, TriageCategory.UNKNOWN)
+                    ):
+                        approved_photos.append(photo)
+                else:
+                    triage_entry["rejection_reasons"] = [
+                        "path_not_accessible_for_triage"
+                    ]
+                    triage_entry["selected"] = False
+
+                triage_results.append(triage_entry)
+
+            if not approved_photos:
+                return AgentResult(
+                    success=False,
+                    data={
+                        "error": "Nenhuma foto passou na triagem",
+                        "triage_results": triage_results,
+                        "card_media": card_media,
+                        "placeholders": ["no_photos_passed_triage"],
+                        "limitations": ["all_photos_rejected_by_triage"],
+                    },
+                    message="Nenhuma foto foi aprovada na triagem automática. "
+                    "Envie fotos frontais, ¾ ou perfil com rosto visível.",
+                )
+
+            analysis_context = {
+                "parallel_results": context.input_data.get("parallel_results") or {},
+                "triage_results": triage_results,
+            }
+
+            analysis = await self.analyzer.analyze(
+                approved_photos, context=analysis_context
+            )
 
             data = {
                 "analysis": analysis,
                 "confidence": analysis.get("confidence", 0.5),
                 "recommendations": {
                     "hairstyles": analysis.get("recommended_hairstyles", []),
+                    "primary_hairstyle": analysis.get("primary_hairstyle"),
+                    "primary_justification": analysis.get("primary_justification"),
                     "eyebrows": analysis.get("recommended_eyebrow_shapes", []),
                     "makeup": analysis.get("recommended_makeup_styles", []),
                 },
-                # Mandatory card-media contract. Consumers must render
-                # personPhoto even if a validated simulation is later attached.
+                "current_hair": analysis.get("current_hair"),
+                "measured_data_used": analysis.get("measured_data_used"),
+                "triage_results": triage_results,
+                "approved_photo_count": len(approved_photos),
                 "card_media": card_media,
-                "source_photos": card_media["realPhotoRefs"],
-                "limitations": [],
+                "source_photos": card_media.get("realPhotoRefs"),
+                "limitations": analysis.get("limitations") or [],
                 "evidence_map": {
                     "face_shape": analysis.get("face_shape_category"),
                     "confidence": analysis.get("confidence"),
+                    "primary_hairstyle": analysis.get("primary_hairstyle"),
                 },
                 "placeholders": [],
             }
