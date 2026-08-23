@@ -3,7 +3,7 @@ import { useAuthStore } from "@/stores/auth-store";
 
 const apiBaseUrl =
   process.env.NEXT_PUBLIC_API_URL ||
-  "https://vision-ai-casting-backend.onrender.com";
+  "https://vision-ai-casting-api.onrender.com";
 
 const api = axios.create({
   baseURL: apiBaseUrl,
