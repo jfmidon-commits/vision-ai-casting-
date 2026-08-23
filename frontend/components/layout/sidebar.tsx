@@ -8,6 +8,7 @@ import {
   Users,
   Camera,
   Brain,
+  Scissors,
   FileText,
   Settings,
   LogOut,
@@ -18,6 +19,7 @@ const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Perfis", href: "/profiles", icon: Users },
   { name: "Ensaios", href: "/photoshoots", icon: Camera },
+  { name: "Visagismo", href: "/visagism", icon: Scissors },
   { name: "Análises", href: "/analyses", icon: Brain },
   { name: "Relatórios", href: "/reports", icon: FileText },
   { name: "Configurações", href: "/settings", icon: Settings },
@@ -44,7 +46,7 @@ export function Sidebar() {
               : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
           )}
         >
-          <Icon className={mobile ? "h-5 w-5" : "h-5 w-5"} />
+          <Icon className="h-5 w-5" />
           {item.name}
         </Link>
       );
