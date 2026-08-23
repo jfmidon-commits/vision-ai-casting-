@@ -22,7 +22,5 @@ services:
         generateValue: true
       - key: OPENAI_API_KEY
         sync: false
-      - key: REDIS_URL
-        sync: false
       - key: AWS_REKOGNITION_ENABLED
         value: "false"
