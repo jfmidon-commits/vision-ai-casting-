@@ -32,3 +32,5 @@ services:
         value: vision-ai-casting-media
       - key: AWS_REKOGNITION_ENABLED
         value: "false"
+      - key: VISION_BYPASS_TRIAGE
+        value: "true"

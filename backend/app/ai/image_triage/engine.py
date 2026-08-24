@@ -104,6 +104,18 @@ class ImageTriageEngine:
 
     def process_image(self, image_path: str) -> TriageResult:
         filename = os.path.basename(image_path)
+
+        # BYPASS: aceitar todas as fotos quando VISION_BYPASS_TRIAGE está ativo
+        if os.environ.get("VISION_BYPASS_TRIAGE", "").lower() in ("1", "true", "yes"):
+            return TriageResult(
+                filename=filename,
+                category=TriageCategory.FRONTAL,
+                confidence=1.0,
+                scores={"bypass": True},
+                metadata={"bypass": True},
+                selected=True,
+            )
+
         try:
             img_array = np.array(Image.open(image_path).convert("RGB"))
         except Exception as exc:
@@ -127,9 +139,6 @@ class ImageTriageEngine:
         pose_result = self._analyze_pose(img_array)
         face_result = self._analyze_face(img_array)
 
-        # FaceLandmarker can miss true 90-degree profiles. PoseLandmarker still
-        # exposes reliable nose/eye/ear geometry in those images, so derive a
-        # conservative profile hint before accepting a posterior classification.
         pose_profile = None
         if not face_result.get("has_face", False):
             pose_profile = self._infer_profile_from_pose(pose_result)
@@ -305,13 +314,6 @@ class ImageTriageEngine:
     def _infer_profile_from_pose(
         self, pose_result: Dict
     ) -> Optional[Tuple[TriageCategory, float, Dict[str, float]]]:
-        """Infer a strong lateral profile when FaceLandmarker misses the face.
-
-        MediaPipe Pose landmarks 0/2/5/7/8 (nose, eyes, ears) remain stable on
-        near-90-degree profiles. A real lateral face places the nose clearly
-        outside the ear midpoint while all facial pose landmarks stay visible.
-        Back views generally do not satisfy both conditions.
-        """
         if not pose_result.get("has_pose", False):
             return None
         landmarks = pose_result.get("landmarks", [])
@@ -331,9 +333,6 @@ class ImageTriageEngine:
         ear_mid_x = (left_ear_x + right_ear_x) / 2
         nose_offset = nose_x - ear_mid_x
 
-        # Require a large, image-normalized lateral displacement. The real
-        # benchmark profiles are beyond 0.14 while 3/4 images are handled by
-        # FaceLandmarker, so 0.10 stays conservative and geometry-based.
         if abs(nose_offset) < 0.10:
             return None
 
