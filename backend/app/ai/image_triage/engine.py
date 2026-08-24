@@ -60,6 +60,7 @@ class ImageTriageEngine:
         try:
             import mediapipe as mp
             from mediapipe.tasks.python import BaseOptions
+            from mediapipe.tasks.python.core import Delegate
             from mediapipe.tasks.python.vision import (
                 FaceLandmarker,
                 FaceLandmarkerOptions,
@@ -75,7 +76,7 @@ class ImageTriageEngine:
                 face_model,
             )
             face_options = FaceLandmarkerOptions(
-                base_options=BaseOptions(model_asset_path=face_model),
+                base_options=BaseOptions(model_asset_path=face_model, delegate=Delegate.CPU),
                 running_mode=RunningMode.IMAGE,
                 num_faces=1,
                 min_face_detection_confidence=0.3,
@@ -90,7 +91,7 @@ class ImageTriageEngine:
                 pose_model,
             )
             pose_options = PoseLandmarkerOptions(
-                base_options=BaseOptions(model_asset_path=pose_model),
+                base_options=BaseOptions(model_asset_path=pose_model, delegate=Delegate.CPU),
                 running_mode=RunningMode.IMAGE,
                 min_pose_detection_confidence=0.3,
                 min_tracking_confidence=0.3,
