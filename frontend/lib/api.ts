@@ -7,9 +7,6 @@ const apiBaseUrl =
 
 const api = axios.create({
   baseURL: apiBaseUrl,
-  headers: {
-    "Content-Type": "application/json",
-  },
 });
 
 api.interceptors.request.use((config) => {
@@ -57,7 +54,6 @@ export const photoshootApi = {
     formData.append("file", file);
     return api.post(`/api/v1/photoshoots/${photoshootId}/photos`, formData, {
       params: { angle },
-      headers: { "Content-Type": "multipart/form-data" },
     });
   },
 };
