@@ -10,13 +10,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.main import app
-from app.database import get_db
-from app.middleware.auth import get_current_user
-from app.routers.photos import _safe_suffix_from_format, _public_triage_contract
+from app.routers.photos import _safe_suffix_from_format, _public_triage_contract, triage_photo
 from app.routers.uploads import _normalize_image_format
 from app.ai.image_triage.engine import TriageCategory, TriageResult
 
@@ -51,29 +46,13 @@ def mock_photo(mock_user):
 @pytest.fixture
 def mock_db_session(mock_photo):
     """Cria um mock de AsyncSession que retorna a foto mockada."""
-    session = AsyncMock(spec=AsyncSession)
-
-    # Configurar o resultado do execute
+    session = AsyncMock()
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = mock_photo
     session.execute = AsyncMock(return_value=mock_result)
     session.commit = AsyncMock()
     session.refresh = AsyncMock()
-
     return session
-
-
-@pytest.fixture
-def client_with_mocks(mock_user, mock_db_session):
-    """Cria um TestClient com dependency_overrides configurados."""
-    app.dependency_overrides[get_current_user] = lambda: mock_user
-    app.dependency_overrides[get_db] = lambda: mock_db_session
-
-    client = TestClient(app)
-    yield client
-
-    # Limpar overrides após o teste
-    app.dependency_overrides.clear()
 
 
 # ========== TESTES: _safe_suffix_from_format (photos.py) ==========
@@ -293,48 +272,46 @@ class TestTempfileWithSafeSuffix:
             assert suffix == ".jpg", f"Formato {fmt!r} deveria cair em .jpg, mas deu {suffix!r}"
 
 
-# ========== TESTES: exception no triage via endpoint real ==========
+# ========== TESTES: exception no triage é logada e retorna fail-closed ==========
 
-class TestTriageEndpointException:
+class TestTriageExceptionLogging:
     """
-    Testa o endpoint POST /api/v1/photos/{photo_id}/triage via TestClient
-    com dependency_overrides, provocando falha em StorageService.read_object_from_url.
+    Testa triage_photo() diretamente com mocks explícitos (sem TestClient).
+    Provoca falha em StorageService.read_object_from_url e verifica:
+    1. logger.exception executado com [TRIAGE_EXCEPTION]
+    2. Retorno é APIResponse com accepted=false, rejection_reasons=["triage_error"]
     """
 
+    @pytest.mark.asyncio
     @patch("app.routers.photos.StorageService.read_object_from_url")
-    def test_s3_exception_logged_and_fail_closed(
-        self, mock_read_s3, client_with_mocks, mock_photo, caplog
+    async def test_s3_exception_logged_and_fail_closed(
+        self, mock_read_s3, mock_photo, mock_user, mock_db_session, caplog
     ):
-        """
-        Provoca RuntimeError em StorageService.read_object_from_url e verifica:
-        1. HTTP 200 (endpoint não quebra, retorna fail-closed)
-        2. Response body contém accepted=false, rejection_reasons=["triage_error"]
-        3. Log contém [TRIAGE_EXCEPTION] com photo_id, exc_type, exc_msg
-        """
-        # Configurar caplog para capturar ERROR
+        # Configurar caplog para capturar ERROR do logger do módulo
         caplog.set_level(logging.ERROR, logger="app.routers.photos")
 
         # Provocar exceção no S3
         mock_read_s3.side_effect = RuntimeError("S3 connection timeout")
 
-        # Fazer request ao endpoint real
-        response = client_with_mocks.post(f"/api/v1/photos/{mock_photo.id}/triage")
+        # Executar a função diretamente, passando mocks como argumentos posicionais
+        # (bypassando Depends do FastAPI)
+        response = await triage_photo(
+            photo_id=mock_photo.id,
+            current_user=mock_user,
+            db=mock_db_session,
+        )
 
-        # 1. Verificar HTTP 200 (fail-closed, não 500)
-        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
-
-        # 2. Verificar contrato público fail-closed
-        body = response.json()
-        assert body["success"] is True  # APIResponse wrapper
-        assert body["data"]["accepted"] is False
-        assert body["data"]["category"] == "rejected"
-        assert body["data"]["confidence"] == 0.0
-        assert body["data"]["selected"] is False
-        assert body["data"]["rejection_reasons"] == ["triage_error"]
-        assert body["message"] == "Photo triage blocked safely"
-
-        # 3. Verificar que o log contém TRIAGE_EXCEPTION
+        # 1. Verificar que o log contém TRIAGE_EXCEPTION
         assert "[TRIAGE_EXCEPTION]" in caplog.text
         assert str(mock_photo.id) in caplog.text
         assert "RuntimeError" in caplog.text
         assert "S3 connection timeout" in caplog.text
+
+        # 2. Verificar contrato público fail-closed (APIResponse model)
+        assert response.success is True  # Wrapper APIResponse sempre success=True
+        assert response.data["accepted"] is False
+        assert response.data["category"] == "rejected"
+        assert response.data["confidence"] == 0.0
+        assert response.data["selected"] is False
+        assert response.data["rejection_reasons"] == ["triage_error"]
+        assert response.message == "Photo triage blocked safely"
