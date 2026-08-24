@@ -40,6 +40,7 @@ class TriageResult:
     selected: bool = False
 
 
+# CI trigger: force rebuild to validate Delegate fix
 class ImageTriageEngine:
     """Classify photos using MediaPipe face/pose landmarks plus CV heuristics."""
 
