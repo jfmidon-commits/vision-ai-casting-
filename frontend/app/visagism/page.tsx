@@ -64,7 +64,7 @@ export default function VisagismPage() {
 
   const selectedCount = useMemo(() => photos.filter((photo) => photo.file).length, [photos]);
   const allSelected = selectedCount === photos.length;
-  const allTriaged = photos.every((photo) => uploaded[photo.angle]?.triage.accepted);
+  const allTriaged = photos.every((photo) => uploaded[photo.angle]?.triage?.accepted);
 
   useEffect(() => {
     let active = true;
@@ -147,6 +147,25 @@ export default function VisagismPage() {
     );
   };
 
+  const handleRetake = (angle: VisagismPhotoAngle) => {
+    setUploaded((current) => {
+      const next = { ...current };
+      delete next[angle];
+      return next;
+    });
+    setPhotos((current) =>
+      current.map((photo) => {
+        if (photo.angle !== angle) return photo;
+        if (photo.previewUrl) URL.revokeObjectURL(photo.previewUrl);
+        return {
+          ...photo,
+          file: undefined,
+          previewUrl: undefined,
+        };
+      })
+    );
+  };
+
   const uploadAndTriage = async () => {
     if (!selectedProfileId || !allSelected) return;
     setIsSubmitting(true);
@@ -182,8 +201,11 @@ export default function VisagismPage() {
       }
 
       setUploaded(nextUploaded);
-      const accepted = photos.every((photo) => nextUploaded[photo.angle]?.triage.accepted);
-      if (!accepted) return;
+      const accepted = photos.every((photo) => nextUploaded[photo.angle]?.triage?.accepted);
+      if (!accepted) {
+        setIsSubmitting(false);
+        return;
+      }
 
       const analysisResponse = await analysisApi.start(photoshootId, {
         analysis_types: ["facial", "grooming", "colorimetry", "photogenic", "expressions", "visagism"],
@@ -203,6 +225,7 @@ export default function VisagismPage() {
 
   const resetFlow = () => {
     setStep("upload");
+    setPhotos(initialPhotos.map(p => ({ ...p })));
     setUploaded({});
     setAnalysisId(null);
     setResult(null);
@@ -242,6 +265,7 @@ export default function VisagismPage() {
         <div className="mt-6 grid grid-cols-2 gap-3">
           {photos.map((photo, index) => {
             const triage = uploaded[photo.angle]?.triage;
+            const isRejected = triage && !triage.accepted;
             return (
               <article key={photo.angle} className="overflow-hidden rounded-xl border bg-card">
                 {photo.previewUrl ? (
@@ -253,9 +277,19 @@ export default function VisagismPage() {
                 <div className="p-3">
                   <p className="text-xs text-muted-foreground">Foto {index + 1}</p>
                   <p className="font-medium">{photo.label}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
+                  <p className={`mt-1 text-xs ${isRejected ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
                     {!triage ? "Aguardando triagem" : triage.accepted ? "✓ Foto aceita" : `⚠ ${triage.rejection_reasons?.[0] || "Foto rejeitada"}`}
                   </p>
+                  {isRejected && (
+                    <button
+                      type="button"
+                      onClick={() => handleRetake(photo.angle)}
+                      className="mt-2 text-xs font-medium text-primary hover:underline"
+                      disabled={isSubmitting}
+                    >
+                      ↻ Refazer esta foto
+                    </button>
+                  )}
                 </div>
               </article>
             );
