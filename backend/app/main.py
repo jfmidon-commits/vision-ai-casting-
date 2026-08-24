@@ -6,6 +6,7 @@ from app.config import settings
 from app.database import init_db
 from app.utils.logger import get_logger
 from app.routers import (
+from app.routers.diagnostics import router as diagnostics_router  # TEMP: remove before merge
     auth_router, profiles_router, photoshoots_router,
     photos_router, analyses_router, reports_router,
     uploads_router, ai_router, commands_router,
@@ -53,6 +54,7 @@ app.include_router(commands_router)      # Vision Core - Commands
 app.include_router(approvals_router)     # Vision Core - Approvals
 app.include_router(career_memory_router)  # Vision Core - Career Memory / Talent Graph
 app.include_router(websocket_router)
+app.include_router(diagnostics_router)  # TEMP: remove before merge
 
 @app.get("/health")
 async def health_check():
