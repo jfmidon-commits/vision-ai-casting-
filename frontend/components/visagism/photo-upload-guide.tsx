@@ -31,13 +31,14 @@ export function PhotoUploadGuide({ photos, onPhotoChange, onContinue }: PhotoUpl
   const handleFile = (angle: VisagismPhotoAngle) => (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) onPhotoChange(angle, file);
+    event.target.value = "";
   };
 
   return (
     <section className="mx-auto flex min-h-dvh w-full max-w-md flex-col bg-background px-4 pb-8 pt-5">
       <div className="mb-6">
         <p className="text-sm font-medium text-muted-foreground">Fotos para análise</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight">Tire 3 fotos do rosto</h1>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight">Tire ou escolha 3 fotos do rosto</h1>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
           Use luz frontal, fundo simples e evite óculos, boné ou qualquer item cobrindo o rosto.
         </p>
@@ -71,19 +72,34 @@ export function PhotoUploadGuide({ photos, onPhotoChange, onContinue }: PhotoUpl
               )}
             </div>
 
-            <label className="mt-4 block">
-              <span className="sr-only">Selecionar foto {photo.label}</span>
-              <input
-                type="file"
-                accept="image/*"
-                capture="user"
-                className="sr-only"
-                onChange={handleFile(photo.angle)}
-              />
-              <span className="flex h-11 w-full cursor-pointer items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium hover:bg-accent">
-                {photo.file ? "Trocar foto" : "Usar câmera ou galeria"}
-              </span>
-            </label>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <label className="block">
+                <span className="sr-only">Abrir câmera para {photo.label}</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="user"
+                  className="sr-only"
+                  onChange={handleFile(photo.angle)}
+                />
+                <span className="flex h-11 w-full cursor-pointer items-center justify-center rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-accent">
+                  Câmera
+                </span>
+              </label>
+
+              <label className="block">
+                <span className="sr-only">Escolher da galeria para {photo.label}</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  onChange={handleFile(photo.angle)}
+                />
+                <span className="flex h-11 w-full cursor-pointer items-center justify-center rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-accent">
+                  Galeria
+                </span>
+              </label>
+            </div>
           </article>
         ))}
       </div>
