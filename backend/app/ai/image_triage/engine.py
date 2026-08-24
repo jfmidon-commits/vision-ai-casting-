@@ -60,6 +60,7 @@ class ImageTriageEngine:
         try:
             import mediapipe as mp
             from mediapipe.tasks.python import BaseOptions
+            from mediapipe.tasks.python.core import Delegate
             from mediapipe.tasks.python.vision import (
                 FaceLandmarker,
                 FaceLandmarkerOptions,
@@ -75,11 +76,11 @@ class ImageTriageEngine:
                 face_model,
             )
             face_options = FaceLandmarkerOptions(
-                base_options=BaseOptions(model_asset_path=face_model),
+                base_options=BaseOptions(model_asset_path=face_model, delegate=Delegate.CPU),
                 running_mode=RunningMode.IMAGE,
                 num_faces=1,
-                min_face_detection_confidence=0.3,
-                min_tracking_confidence=0.3,
+                min_face_detection_confidence=0.1,
+                min_tracking_confidence=0.1,
                 output_face_blendshapes=True,
             )
             self._face_landmarker = FaceLandmarker.create_from_options(face_options)
@@ -90,10 +91,10 @@ class ImageTriageEngine:
                 pose_model,
             )
             pose_options = PoseLandmarkerOptions(
-                base_options=BaseOptions(model_asset_path=pose_model),
+                base_options=BaseOptions(model_asset_path=pose_model, delegate=Delegate.CPU),
                 running_mode=RunningMode.IMAGE,
-                min_pose_detection_confidence=0.3,
-                min_tracking_confidence=0.3,
+                min_pose_detection_confidence=0.1,
+                min_tracking_confidence=0.1,
             )
             self._pose_landmarker = PoseLandmarker.create_from_options(pose_options)
             self._initialized = True
@@ -103,6 +104,18 @@ class ImageTriageEngine:
 
     def process_image(self, image_path: str) -> TriageResult:
         filename = os.path.basename(image_path)
+
+        # BYPASS: aceitar todas as fotos quando VISION_BYPASS_TRIAGE está ativo
+        if os.environ.get("VISION_BYPASS_TRIAGE", "").lower() in ("1", "true", "yes"):
+            return TriageResult(
+                filename=filename,
+                category=TriageCategory.FRONTAL,
+                confidence=1.0,
+                scores={"bypass": True},
+                metadata={"bypass": True},
+                selected=True,
+            )
+
         try:
             img_array = np.array(Image.open(image_path).convert("RGB"))
         except Exception as exc:
