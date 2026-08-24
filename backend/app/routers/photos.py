@@ -11,6 +11,7 @@ from app.database import get_db
 from app.middleware.auth import get_current_user
 from app.models import Photo
 from app.schemas import APIResponse, PhotoBase, PhotoResponse
+from app.services.storage_service import StorageService
 
 router = APIRouter(prefix="/api/v1/photos", tags=["photos"])
 
@@ -68,8 +69,8 @@ async def triage_photo(
 ):
     """Classify one stored real photo before full analysis.
 
-    This endpoint is intentionally fail-closed and exposes no landmarks or raw
-    CV diagnostics. A download/engine failure is returned as accepted=false.
+    Stored media remains private. The backend reads the object with its own S3
+    credentials instead of requiring public bucket access.
     """
     result = await db.execute(
         select(Photo).where(
@@ -82,16 +83,12 @@ async def triage_photo(
 
     tmp_path = None
     try:
-        import aiohttp
+        raw = StorageService.read_object_from_url(photo.url)
 
-        async with aiohttp.ClientSession() as session:
-            async with session.get(photo.url) as response:
-                response.raise_for_status()
-                raw = await response.read()
-
-        fd, tmp_path = tempfile.mkstemp(suffix=".jpg")
-        os.write(fd, raw)
-        os.close(fd)
+        suffix = f".{photo.format}" if photo.format else ".jpg"
+        fd, tmp_path = tempfile.mkstemp(suffix=suffix)
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(raw)
 
         triage_result = ImageTriageEngine().process_image(tmp_path)
         public = _public_triage_contract(photo_id, triage_result)
