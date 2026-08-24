@@ -79,8 +79,8 @@ class ImageTriageEngine:
                 base_options=BaseOptions(model_asset_path=face_model, delegate=Delegate.CPU),
                 running_mode=RunningMode.IMAGE,
                 num_faces=1,
-                min_face_detection_confidence=0.3,
-                min_tracking_confidence=0.3,
+                min_face_detection_confidence=0.1,
+                min_tracking_confidence=0.1,
                 output_face_blendshapes=True,
             )
             self._face_landmarker = FaceLandmarker.create_from_options(face_options)
@@ -93,8 +93,8 @@ class ImageTriageEngine:
             pose_options = PoseLandmarkerOptions(
                 base_options=BaseOptions(model_asset_path=pose_model, delegate=Delegate.CPU),
                 running_mode=RunningMode.IMAGE,
-                min_pose_detection_confidence=0.3,
-                min_tracking_confidence=0.3,
+                min_pose_detection_confidence=0.1,
+                min_tracking_confidence=0.1,
             )
             self._pose_landmarker = PoseLandmarker.create_from_options(pose_options)
             self._initialized = True
