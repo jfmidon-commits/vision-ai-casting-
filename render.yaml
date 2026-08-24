@@ -22,5 +22,13 @@ services:
         generateValue: true
       - key: OPENAI_API_KEY
         sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_REGION
+        value: us-east-2
+      - key: S3_BUCKET
+        value: vision-ai-casting-media
       - key: AWS_REKOGNITION_ENABLED
         value: "false"
