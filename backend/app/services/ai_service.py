@@ -104,6 +104,20 @@ class AIService:
                         "selected": False,
                         "rejection_reasons": [],
                     }
+
+                    # BYPASS: aceitar todas as fotos quando VISION_BYPASS_TRIAGE está ativo
+                    if os.environ.get("VISION_BYPASS_TRIAGE", "").lower() in ("1", "true", "yes"):
+                        entry = {
+                            "filename": photo_meta.get("id", "unknown"),
+                            "category": TriageCategory.FRONTAL.value,
+                            "confidence": 1.0,
+                            "selected": True,
+                            "rejection_reasons": [],
+                        }
+                        approved_preprocessed.append(prep)
+                        triage_results.append(entry)
+                        continue
+
                     # Download to temp for triage (engine expects local path)
                     url = photo_meta.get("url")
                     tmp_path = None
