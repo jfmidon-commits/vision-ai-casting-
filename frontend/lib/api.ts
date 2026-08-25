@@ -128,7 +128,7 @@ export const photoApi = {
 
 export const analysisApi = {
   list: (params?: any) => api.get("/api/v1/analyses", operationConfig("listar análises", { params })),
-  get: (id: string) => api.get(`/api/v1/analyses/${id}`, operationConfig(`polling da análise ${id.slice(0, 8)}`)),
+  get: (id: string) => api.get(`/api/v1/ai/status/${id}`, operationConfig(`polling da análise ${id.slice(0, 8)}`)),
   getVisagism: (id: string) => api.get(`/api/v1/analyses/${id}/visagism`, operationConfig(`carregar resultado ${id.slice(0, 8)}`)),
   start: (photoshootId: string, data: any) =>
     api.post(
