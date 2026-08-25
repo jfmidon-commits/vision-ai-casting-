@@ -11,58 +11,57 @@ from app.services.storage_service import StorageService
 logger = logging.getLogger(__name__)
 
 class ImagePreprocessor:
-    TARGET_SIZE = 2048
+    """Preprocessor otimizado para baixa memória (Render 512Mi)."""
+    TARGET_SIZE = 1024  # Reduzido de 2048 para economizar ~75% de memória
     THUMBNAIL_SIZE = 512
 
     async def process_batch(self, photos: List[Dict]) -> List[Dict]:
-        tasks = [self.process_single(photo) for photo in photos]
-        return await asyncio.gather(*tasks)
+        """Processa fotos sequencialmente em vez de simultaneamente para evitar OOM."""
+        results = []
+        for photo in photos:
+            result = await self.process_single(photo)
+            results.append(result)
+        return results
 
     async def process_single(self, photo: Dict) -> Dict:
         photo_id = photo.get("id", "unknown")
         photo_url = photo.get("url", "")
 
-        logger.info(
-            "Preprocessing photo %s from URL %s", photo_id, photo_url
-        )
+        logger.info("Preprocessing photo %s", photo_id)
 
-        # Download via S3 SDK using IAM credentials instead of public HTTP URL.
-        # The bucket is private (403 on public URLs), so we must use the
-        # backend's AWS credentials to read the object directly.
+        # Download via S3 SDK com timeout via asyncio.wait_for
         try:
-            image_bytes = await asyncio.to_thread(
-                StorageService.read_object_from_url, photo_url
+            image_bytes = await asyncio.wait_for(
+                asyncio.to_thread(StorageService.read_object_from_url, photo_url),
+                timeout=30,
             )
-        except Exception as exc:
-            logger.error(
-                "Failed to download photo %s from S3: %s", photo_id, exc
-            )
+        except asyncio.TimeoutError as exc:
+            logger.error("Timeout downloading photo %s after 30s", photo_id)
             raise RuntimeError(
-                f"Falha ao baixar foto {photo_id} do storage: {exc}"
+                f"Timeout ao baixar foto {photo_id} do storage"
+            ) from exc
+        except Exception as exc:
+            logger.error("Failed to download photo %s: %s", photo_id, exc)
+            raise RuntimeError(
+                f"Falha ao baixar foto {photo_id}: {exc}"
             ) from exc
 
-        # Validation: non-empty body
         if not image_bytes or len(image_bytes) == 0:
-            logger.error("Photo %s returned empty body", photo_id)
             raise ValueError(f"Foto {photo_id} retornou corpo vazio")
 
-        logger.info(
-            "Photo %s downloaded: %d bytes", photo_id, len(image_bytes)
-        )
+        logger.info("Photo %s: %d bytes", photo_id, len(image_bytes))
 
-        # Validation: try to open with PIL
+        # Open with PIL
         try:
             img = Image.open(io.BytesIO(image_bytes))
         except Exception as exc:
             logger.error(
-                "Photo %s is not a valid image (first 32 bytes: %s): %s",
+                "Photo %s invalid (hex: %s): %s",
                 photo_id,
                 image_bytes[:32].hex(),
                 exc,
             )
-            raise ValueError(
-                f"Foto {photo_id} não é uma imagem válida"
-            ) from exc
+            raise ValueError(f"Foto {photo_id} não é imagem válida") from exc
 
         if img.mode != "RGB":
             img = img.convert("RGB")
