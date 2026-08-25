@@ -19,7 +19,22 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    const config = error.config as (typeof error.config & { __retryCount?: number }) | undefined;
+    const status = error.response?.status as number | undefined;
+    const method = config?.method?.toLowerCase();
+    const isTransientGetFailure =
+      method === "get" &&
+      (!error.response || status === 429 || status === 502 || status === 503 || status === 504);
+
+    if (config && isTransientGetFailure) {
+      config.__retryCount = (config.__retryCount || 0) + 1;
+      if (config.__retryCount <= 12) {
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+        return api.request(config);
+      }
+    }
+
     if (error.response?.status === 401) {
       useAuthStore.getState().logout();
       window.location.href = "/login";
