@@ -156,6 +156,42 @@ async def analyze_photoshoot(
     )
 
 
+@router.get("/status/{analysis_id}", response_model=APIResponse)
+async def get_analysis_status(
+    analysis_id: UUID,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Analysis).where(
+            and_(
+                Analysis.id == analysis_id,
+                Analysis.tenant_id == current_user.tenant_id,
+            )
+        )
+    )
+    analysis = result.scalar_one_or_none()
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+
+    if analysis.status == "failed":
+        error_message = "A análise falhou no backend."
+        if isinstance(analysis.raw_results, dict):
+            pipeline_error = analysis.raw_results.get("pipeline_error")
+            if isinstance(pipeline_error, dict) and pipeline_error.get("message"):
+                error_message = str(pipeline_error["message"])
+        raise HTTPException(status_code=409, detail=error_message)
+
+    return APIResponse(
+        data={
+            "id": str(analysis.id),
+            "status": analysis.status,
+            "processing_time_ms": analysis.processing_time_ms,
+            "completed_at": analysis.completed_at,
+        }
+    )
+
+
 @router.post("/analyze/facial", response_model=APIResponse)
 async def analyze_facial(
     photo_id: UUID,
