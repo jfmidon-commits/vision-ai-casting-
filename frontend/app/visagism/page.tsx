@@ -50,12 +50,29 @@ const backendAngle: Record<VisagismPhotoAngle, string> = {
   profile: "left_profile",
 };
 
-function extractMessage(error: unknown) {
-  if (error instanceof Error && error.message) return error.message;
+/**
+ * Extrai a mensagem de erro mais informativa disponível.
+ * Prioridade:
+ * 1. response.data.detail  (mensagem do backend)
+ * 2. response.data.message (mensagem enriquecida pelo interceptor Axios)
+ * 3. error.message         (fallback genérico do Axios/browser)
+ * 4. fallback genérico
+ *
+ * ANTES: verificava error.message primeiro, então "Network Error"
+ * sempre mascarava o contexto rico do interceptor (qual operação,
+ * qual endpoint, após quanto tempo).
+ */
+function extractMessage(error: unknown): string {
   if (typeof error === "object" && error && "response" in error) {
     const response = (error as { response?: { data?: { detail?: string; message?: string } } }).response;
-    return response?.data?.detail || response?.data?.message || "Não foi possível concluir esta etapa.";
+    const apiMessage = response?.data?.detail || response?.data?.message;
+    if (apiMessage) return apiMessage;
   }
+
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
   return "Não foi possível concluir esta etapa.";
 }
 
