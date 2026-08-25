@@ -1,5 +1,10 @@
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+import logging
+import os
+
+logger = logging.getLogger("app.config")
+
 
 class Settings(BaseSettings):
     APP_NAME: str = "Vision AI Casting"
@@ -67,8 +72,45 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
 
+
 @lru_cache()
 def get_settings() -> Settings:
     return Settings()
 
+
 settings = get_settings()
+
+
+def _validate_startup_config():
+    """
+    Valida configurações críticas no startup.
+    Não altera defaults — apenas loga o que está efetivamente carregado.
+    """
+    critical = {
+        "AWS_REGION": settings.AWS_REGION,
+        "S3_BUCKET": settings.S3_BUCKET,
+        "AWS_ACCESS_KEY_ID": "configured" if settings.AWS_ACCESS_KEY_ID else "MISSING",
+        "AWS_SECRET_ACCESS_KEY": "configured" if settings.AWS_SECRET_ACCESS_KEY else "MISSING",
+    }
+
+    logger.info("[CONFIG_STARTUP] environment=%s", settings.ENVIRONMENT)
+    for key, value in critical.items():
+        logger.info("[CONFIG_STARTUP] %s=%s", key, value)
+
+    if not settings.AWS_ACCESS_KEY_ID or not settings.AWS_SECRET_ACCESS_KEY:
+        logger.warning("[CONFIG_STARTUP] AWS credentials not configured — S3 operations will fail")
+
+    if settings.ENVIRONMENT == "production":
+        if settings.AWS_REGION == "us-east-1" and not os.environ.get("AWS_REGION"):
+            logger.warning(
+                "[CONFIG_STARTUP] AWS_REGION is default 'us-east-1' but no env var set. "
+                "If your bucket is in another region, uploads will fail."
+            )
+        if settings.S3_BUCKET == "vision-ai-casting" and not os.environ.get("S3_BUCKET"):
+            logger.warning(
+                "[CONFIG_STARTUP] S3_BUCKET is default 'vision-ai-casting' but no env var set. "
+                "If your bucket has a different name, uploads will fail."
+            )
+
+
+_validate_startup_config()
