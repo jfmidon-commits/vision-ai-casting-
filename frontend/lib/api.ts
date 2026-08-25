@@ -7,30 +7,45 @@ const apiBaseUrl =
 
 const api = axios.create({
   baseURL: apiBaseUrl,
+  timeout: 30000,
 });
+
+const MAX_GET_RETRIES = 5;
+const RETRY_DELAYS = [2000, 3000, 5000, 8000, 13000];
+
+function isTransientStatus(status?: number) {
+  return status === 429 || status === 502 || status === 503 || status === 504;
+}
 
 api.interceptors.request.use((config) => {
   const token = useAuthStore.getState().token;
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  (config as typeof config & { __requestStartTime?: number }).__requestStartTime = Date.now();
   return config;
 });
 
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const config = error.config as (typeof error.config & { __retryCount?: number }) | undefined;
+    const config = error.config as
+      | (typeof error.config & { __retryCount?: number; __requestStartTime?: number })
+      | undefined;
     const status = error.response?.status as number | undefined;
-    const method = config?.method?.toLowerCase();
+    const method = config?.method?.toLowerCase() || "";
     const isTransientGetFailure =
-      method === "get" &&
-      (!error.response || status === 429 || status === 502 || status === 503 || status === 504);
+      method === "get" && (!error.response || isTransientStatus(status));
 
     if (config && isTransientGetFailure) {
       config.__retryCount = (config.__retryCount || 0) + 1;
-      if (config.__retryCount <= 12) {
-        await new Promise((resolve) => setTimeout(resolve, 5000));
+      if (config.__retryCount <= MAX_GET_RETRIES) {
+        const delay = RETRY_DELAYS[Math.min(config.__retryCount - 1, RETRY_DELAYS.length - 1)];
+        console.warn(
+          `[API retry] ${method.toUpperCase()} ${config.url} ` +
+            `tentativa ${config.__retryCount}/${MAX_GET_RETRIES} em ${delay}ms`
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
         return api.request(config);
       }
     }
@@ -40,16 +55,22 @@ api.interceptors.response.use(
       window.location.href = "/login";
     }
 
+    const elapsed = config?.__requestStartTime
+      ? Date.now() - config.__requestStartTime
+      : undefined;
+    const requestLabel = `${method.toUpperCase() || "REQUEST"} ${config?.url || "API"}`;
+    const elapsedLabel = elapsed !== undefined ? ` após ${elapsed}ms` : "";
+
     if (!error.response) {
       error.response = {
         data: {
-          message: `Falha de rede ao acessar ${apiBaseUrl}: ${error.message || "sem resposta do servidor"}`,
+          message: `Falha de rede ao acessar ${apiBaseUrl} (${requestLabel}): ${error.message || "sem resposta do servidor"}${elapsedLabel}`,
         },
       };
     } else if (!error.response.data?.detail && !error.response.data?.message) {
       error.response.data = {
         ...(typeof error.response.data === "object" && error.response.data ? error.response.data : {}),
-        message: `Falha HTTP ${error.response.status || "desconhecida"} em ${error.config?.url || "requisição da API"}`,
+        message: `Falha HTTP ${error.response.status || "desconhecida"} em ${requestLabel}${elapsedLabel}`,
       };
     }
 
@@ -83,6 +104,7 @@ export const photoshootApi = {
     formData.append("file", file);
     return api.post(`/api/v1/photoshoots/${photoshootId}/photos`, formData, {
       params: { angle },
+      timeout: 60000,
     });
   },
 };
