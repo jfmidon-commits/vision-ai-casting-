@@ -18,6 +18,14 @@ type UploadedPhotoState = {
   triage: PhotoTriageResult;
 };
 
+type PersistedAnalysis = {
+  analysisId: string;
+  startedAt: number;
+};
+
+const ACTIVE_ANALYSIS_STORAGE_KEY = "vision:visagism:active-analysis";
+const ACTIVE_ANALYSIS_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
 const initialPhotos: VisagismPhotoDraft[] = [
   {
     angle: "front",
@@ -43,11 +51,18 @@ const backendAngle: Record<VisagismPhotoAngle, string> = {
 };
 
 function extractMessage(error: unknown) {
+  if (error instanceof Error && error.message) return error.message;
   if (typeof error === "object" && error && "response" in error) {
     const response = (error as { response?: { data?: { detail?: string; message?: string } } }).response;
     return response?.data?.detail || response?.data?.message || "Não foi possível concluir esta etapa.";
   }
   return "Não foi possível concluir esta etapa.";
+}
+
+function clearPersistedAnalysis() {
+  if (typeof window !== "undefined") {
+    window.localStorage.removeItem(ACTIVE_ANALYSIS_STORAGE_KEY);
+  }
 }
 
 export default function VisagismPage() {
@@ -65,6 +80,29 @@ export default function VisagismPage() {
   const selectedCount = useMemo(() => photos.filter((photo) => photo.file).length, [photos]);
   const allSelected = selectedCount === photos.length;
   const allTriaged = photos.every((photo) => uploaded[photo.angle]?.triage?.accepted);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(ACTIVE_ANALYSIS_STORAGE_KEY);
+      if (!raw) return;
+      const persisted = JSON.parse(raw) as PersistedAnalysis;
+      const isValid =
+        typeof persisted.analysisId === "string" &&
+        persisted.analysisId.length > 0 &&
+        typeof persisted.startedAt === "number" &&
+        Date.now() - persisted.startedAt < ACTIVE_ANALYSIS_MAX_AGE_MS;
+
+      if (!isValid) {
+        clearPersistedAnalysis();
+        return;
+      }
+
+      setAnalysisId(persisted.analysisId);
+      setStep("processing");
+    } catch {
+      clearPersistedAnalysis();
+    }
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -103,12 +141,17 @@ export default function VisagismPage() {
           const visagism = await analysisApi.getVisagism(analysisId);
           if (cancelled) return;
           setResult((visagism.data?.data || {}) as VisagismResult);
+          clearPersistedAnalysis();
           setStep("result");
           return;
         }
 
         if (status === "failed") {
-          setErrorMessage("A análise não foi concluída. Tente novamente com outras fotos.");
+          clearPersistedAnalysis();
+          setErrorMessage(
+            (response.data?.data?.error_message as string | undefined) ||
+              "A análise não foi concluída. Tente novamente com outras fotos."
+          );
           setStep("error");
           return;
         }
@@ -180,7 +223,7 @@ export default function VisagismPage() {
         notes: "Fluxo mobile de visagismo",
       });
       const photoshootId = shootResponse.data?.data?.id as string;
-      if (!photoshootId) throw new Error("photoshoot_id_missing");
+      if (!photoshootId) throw new Error("ID da sessão de fotos não retornado pelo servidor.");
 
       const nextUploaded: Record<string, UploadedPhotoState> = {};
       for (const photo of photos) {
@@ -191,7 +234,7 @@ export default function VisagismPage() {
           backendAngle[photo.angle]
         );
         const photoId = uploadResponse.data?.data?.id as string;
-        if (!photoId) throw new Error("photo_id_missing");
+        if (!photoId) throw new Error(`ID da foto ${photo.label} não retornado após upload.`);
 
         const triageResponse = await photoApi.triage(photoId);
         nextUploaded[photo.angle] = {
@@ -213,7 +256,12 @@ export default function VisagismPage() {
         notify_on_complete: true,
       });
       const newAnalysisId = analysisResponse.data?.data?.analysis_id as string;
-      if (!newAnalysisId) throw new Error("analysis_id_missing");
+      if (!newAnalysisId) throw new Error("ID da análise não retornado pelo servidor.");
+
+      window.localStorage.setItem(
+        ACTIVE_ANALYSIS_STORAGE_KEY,
+        JSON.stringify({ analysisId: newAnalysisId, startedAt: Date.now() } satisfies PersistedAnalysis)
+      );
       setAnalysisId(newAnalysisId);
       setStep("processing");
     } catch (error) {
@@ -224,8 +272,9 @@ export default function VisagismPage() {
   };
 
   const resetFlow = () => {
+    clearPersistedAnalysis();
     setStep("upload");
-    setPhotos(initialPhotos.map(p => ({ ...p })));
+    setPhotos(initialPhotos.map((p) => ({ ...p })));
     setUploaded({});
     setAnalysisId(null);
     setResult(null);
@@ -277,7 +326,7 @@ export default function VisagismPage() {
                 <div className="p-3">
                   <p className="text-xs text-muted-foreground">Foto {index + 1}</p>
                   <p className="font-medium">{photo.label}</p>
-                  <p className={`mt-1 text-xs ${isRejected ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
+                  <p className={`mt-1 text-xs ${isRejected ? "text-destructive font-medium" : "text-muted-foreground"}`}>
                     {!triage ? "Aguardando triagem" : triage.accepted ? "✓ Foto aceita" : `⚠ ${triage.rejection_reasons?.[0] || "Foto rejeitada"}`}
                   </p>
                   {isRejected && (
@@ -332,7 +381,16 @@ export default function VisagismPage() {
       <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col items-center justify-center bg-background px-6 text-center">
         <h1 className="text-2xl font-semibold">Não foi possível concluir</h1>
         <p className="mt-3 text-sm leading-6 text-muted-foreground">{errorMessage}</p>
-        <Button className="mt-7 h-12 w-full" onClick={resetFlow}>Tentar novamente</Button>
+        {analysisId ? (
+          <Button className="mt-7 h-12 w-full" onClick={() => setStep("processing")}>Retomar análise</Button>
+        ) : (
+          <Button className="mt-7 h-12 w-full" onClick={resetFlow}>Tentar novamente</Button>
+        )}
+        {analysisId ? (
+          <button type="button" className="mt-4 text-sm text-muted-foreground underline" onClick={resetFlow}>
+            Começar uma nova análise
+          </button>
+        ) : null}
       </main>
     );
   }
