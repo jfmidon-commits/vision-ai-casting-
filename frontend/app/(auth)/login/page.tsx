@@ -32,6 +32,14 @@ export default function LoginPage() {
     return true;
   };
 
+  const persistSession = (accessToken: string, refreshToken?: string | null) => {
+    login(
+      { id: "1", email, name: "Usuário", role: "admin", tenant_id: "1" },
+      accessToken,
+      refreshToken || null
+    );
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
@@ -40,8 +48,8 @@ export default function LoginPage() {
     setMessage("");
     try {
       const res = await authApi.login(email, password);
-      const { access_token } = res.data;
-      login({ id: "1", email, name: "Usuário", role: "admin", tenant_id: "1" }, access_token);
+      const { access_token, refresh_token } = res.data;
+      persistSession(access_token, refresh_token);
       router.push("/dashboard");
     } catch (err: any) {
       setError(err.response?.data?.detail || "Erro ao fazer login");
@@ -59,8 +67,8 @@ export default function LoginPage() {
       await authApi.register({ email, password });
       setMessage("Conta criada. Entrando...");
       const res = await authApi.login(email, password);
-      const { access_token } = res.data;
-      login({ id: "1", email, name: "Usuário", role: "admin", tenant_id: "1" }, access_token);
+      const { access_token, refresh_token } = res.data;
+      persistSession(access_token, refresh_token);
       router.push("/dashboard");
     } catch (err: any) {
       setError(err.response?.data?.detail || "Não foi possível criar a conta");
@@ -77,24 +85,52 @@ export default function LoginPage() {
             <Brain className="h-6 w-6 text-primary" />
           </div>
           <CardTitle className="text-2xl">Vision AI Casting</CardTitle>
-          <p className="text-sm text-muted-foreground">Entre ou crie sua conta para continuar</p>
+          <p className="text-sm text-muted-foreground">
+            Entre ou crie sua conta para continuar
+          </p>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" autoComplete="email" placeholder="seu@email.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
+              <Input
+                id="email"
+                type="email"
+                autoComplete="email"
+                placeholder="seu@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Senha</Label>
-              <Input id="password" type="password" autoComplete="current-password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required />
+              <Input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
             {message && <p className="text-sm text-muted-foreground">{message}</p>}
-            <Button type="submit" className="w-full" disabled={loading || registering}>
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={loading || registering}
+            >
               {loading ? "Entrando..." : "Entrar"}
             </Button>
-            <Button type="button" variant="outline" className="w-full" onClick={handleRegister} disabled={loading || registering}>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={handleRegister}
+              disabled={loading || registering}
+            >
               {registering ? "Criando conta..." : "Criar conta"}
             </Button>
           </form>
