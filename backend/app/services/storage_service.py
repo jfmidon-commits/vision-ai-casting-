@@ -1,6 +1,6 @@
 import boto3
-from urllib.parse import urlparse
-
+from botocore.config import Config
+from typing import Optional
 from app.config import settings
 
 
@@ -15,45 +15,41 @@ class StorageService:
                 aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
                 aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
                 region_name=settings.AWS_REGION,
-                endpoint_url=settings.S3_ENDPOINT or None,
+                config=Config(
+                    connect_timeout=10,
+                    read_timeout=30,
+                    retries={"max_attempts": 2, "mode": "standard"},
+                ),
             )
         return cls._client
 
     @classmethod
-    async def upload(cls, file, photo_id: str):
-        client = cls.get_client()
-        ext = file.filename.split(".")[-1].lower()
-        key = f"photos/{photo_id}.{ext}"
-
-        content = await file.read()
-        client.put_object(
+    async def upload_file(cls, file_data: bytes, key: str, content_type: str = "image/jpeg") -> str:
+        cls.get_client().put_object(
             Bucket=settings.S3_BUCKET,
             Key=key,
-            Body=content,
-            ContentType=file.content_type,
+            Body=file_data,
+            ContentType=content_type,
         )
-
-        url = f"https://{settings.S3_BUCKET}.s3.{settings.AWS_REGION}.amazonaws.com/{key}"
-        # No thumbnail object is generated yet. Point the thumbnail to the real
-        # uploaded object instead of returning a URL that does not exist.
-        return url, url
+        return f"https://{settings.S3_BUCKET}.s3.{settings.AWS_REGION}.amazonaws.com/{key}"
 
     @classmethod
     def read_object_from_url(cls, url: str) -> bytes:
-        """Read an object from this app's private S3 bucket using IAM credentials."""
+        from urllib.parse import urlparse
+
         parsed = urlparse(url)
         key = parsed.path.lstrip("/")
-        if not key:
-            raise ValueError("s3_object_key_missing")
-
         response = cls.get_client().get_object(Bucket=settings.S3_BUCKET, Key=key)
         return response["Body"].read()
 
     @classmethod
-    def get_presigned_url(cls, key: str, expires_in: int = 3600):
-        client = cls.get_client()
-        return client.generate_presigned_url(
-            "get_object",
-            Params={"Bucket": settings.S3_BUCKET, "Key": key},
-            ExpiresIn=expires_in,
-        )
+    async def delete_file(cls, key: str) -> bool:
+        try:
+            cls.get_client().delete_object(Bucket=settings.S3_BUCKET, Key=key)
+            return True
+        except Exception:
+            return False
+
+    @classmethod
+    def get_file_url(cls, key: str) -> str:
+        return f"https://{settings.S3_BUCKET}.s3.{settings.AWS_REGION}.amazonaws.com/{key}"
