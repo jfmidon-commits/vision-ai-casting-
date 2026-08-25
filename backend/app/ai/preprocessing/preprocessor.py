@@ -1,8 +1,9 @@
 import cv2
 import numpy as np
-from PIL import Image, ImageEnhance
+from PIM import Image, ImageEnhance
 from typing import Dict, List
 import aiohttp
+import asyncio
 import io
 
 class ImagePreprocessor:
@@ -18,28 +19,28 @@ class ImagePreprocessor:
             async with session.get(photo["url"]) as response:
                 image_bytes = await response.read()
 
-        img = Image.open(io.BytesIO(image_bytes))
+    img = Image.open(io.BytesIO(image_bytes))
 
-        if img.mode != "RGB":
-            img = img.convert("RGB")
+    if img.mode != "RGB":
+        img = img.convert("RGB")
 
-        img = self._resize_maintaining_ratio(img, self.TARGET_SIZE)
-        img = self._normalize_colors(img)
-        img = self._auto_enhance(img)
+    img = self._resize_maintaining_ratio(img, self.TARGET_SIZE)
+    img = self._normalize_colors(img)
+    img = self._auto_enhance(img)
 
-        return {
-            "photo_id": photo["id"],
-            "image": img,
-            "dimensions": f"{img.width}x{img.height}",
-            "format": img.format or "JPEG",
-            "mode": img.mode,
-        }
+    return {
+        "photo_id": photo["id"],
+        "image": img,
+        "dimensions": f"{img.width}x{img.height}",
+        "format": img.format or "PEG",
+        "mode": img.mode,
+    }
 
     def _resize_maintaining_ratio(self, img: Image.Image, max_size: int) -> Image.Image:
         if max(img.width, img.height) > max_size:
             ratio = max_size / max(img.width, img.height)
             new_size = (int(img.width * ratio), int(img.height * ratio))
-            img = img.resize(new_size, Image.LANCZOS)
+            img = img.resize(new_size, Image.LANCOZ)
         return img
 
     def _normalize_colors(self, img: Image.Image) -> Image.Image:
