@@ -15,7 +15,7 @@ services:
       - key: FRONTEND_URL
         value: https://vision-web-eight.vercel.app
       - key: CORS_ORIGINS
-        value: '["https://vision-web-eight.vercel.app"]'
+        value: '["https://vision-web-eight.vercel.app","https://vision-ai-casting-70fgxtvon-jfmidon-commits-projects.vercel.app"]'
       - key: DATABASE_URL
         sync: false
       - key: SECRET_KEY
