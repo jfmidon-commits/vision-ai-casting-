@@ -43,6 +43,21 @@ function isAuthEndpoint(url?: string) {
   );
 }
 
+function isAuthenticationFailure(error: any, status?: number) {
+  if (status === 401) return true;
+  if (status !== 403) return false;
+
+  const detail = String(
+    error?.response?.data?.detail || error?.response?.data?.message || ""
+  ).toLowerCase();
+
+  return (
+    detail.includes("not authenticated") ||
+    detail.includes("invalid token") ||
+    detail.includes("user not found")
+  );
+}
+
 async function refreshAccessToken(): Promise<TokenResponse | null> {
   const storedRefreshToken = useAuthStore.getState().refreshToken;
   if (!storedRefreshToken) return null;
@@ -77,11 +92,19 @@ async function refreshAccessToken(): Promise<TokenResponse | null> {
   return refreshPromise;
 }
 
-api.interceptors.request.use((config) => {
-  const token = useAuthStore.getState().token;
+api.interceptors.request.use(async (config) => {
+  let token = useAuthStore.getState().token;
+  const refreshToken = useAuthStore.getState().refreshToken;
+
+  if (!token && refreshToken && !isAuthEndpoint(config.url)) {
+    const refreshed = await refreshAccessToken();
+    token = refreshed?.access_token || null;
+  }
+
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+
   (config as typeof config & RetryConfig).__requestStartTime = Date.now();
   return config;
 });
@@ -92,9 +115,10 @@ api.interceptors.response.use(
     const config = error.config as (typeof error.config & RetryConfig) | undefined;
     const status = error.response?.status as number | undefined;
     const method = config?.method?.toLowerCase() || "";
+    const authFailure = isAuthenticationFailure(error, status);
 
     if (
-      status === 401 &&
+      authFailure &&
       config &&
       !config.__authRetry &&
       !isAuthEndpoint(config.url)
@@ -133,7 +157,7 @@ api.interceptors.response.use(
       }
     }
 
-    if (status === 401 && isAuthEndpoint(config?.url)) {
+    if (authFailure && isAuthEndpoint(config?.url)) {
       return Promise.reject(error);
     }
 
