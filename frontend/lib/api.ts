@@ -24,6 +24,20 @@ api.interceptors.response.use(
       useAuthStore.getState().logout();
       window.location.href = "/login";
     }
+
+    if (!error.response) {
+      error.response = {
+        data: {
+          message: `Falha de rede ao acessar ${apiBaseUrl}: ${error.message || "sem resposta do servidor"}`,
+        },
+      };
+    } else if (!error.response.data?.detail && !error.response.data?.message) {
+      error.response.data = {
+        ...(typeof error.response.data === "object" && error.response.data ? error.response.data : {}),
+        message: `Falha HTTP ${error.response.status || "desconhecida"} em ${error.config?.url || "requisição da API"}`,
+      };
+    }
+
     return Promise.reject(error);
   }
 );
