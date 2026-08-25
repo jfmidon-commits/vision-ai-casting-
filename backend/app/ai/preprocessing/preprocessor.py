@@ -2,9 +2,13 @@ import cv2
 import numpy as np
 from PIL import Image, ImageEnhance
 from typing import Dict, List
-import aiohttp
-import asyncio
 import io
+import asyncio
+import logging
+
+from app.services.storage_service import StorageService
+
+logger = logging.getLogger(__name__)
 
 class ImagePreprocessor:
     TARGET_SIZE = 2048
@@ -15,11 +19,50 @@ class ImagePreprocessor:
         return await asyncio.gather(*tasks)
 
     async def process_single(self, photo: Dict) -> Dict:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(photo["url"]) as response:
-                image_bytes = await response.read()
+        photo_id = photo.get("id", "unknown")
+        photo_url = photo.get("url", "")
 
-        img = Image.open(io.BytesIO(image_bytes))
+        logger.info(
+            "Preprocessing photo %s from URL %s", photo_id, photo_url
+        )
+
+        # Download via S3 SDK using IAM credentials instead of public HTTP URL.
+        # The bucket is private (403 on public URLs), so we must use the
+        # backend's AWS credentials to read the object directly.
+        try:
+            image_bytes = await asyncio.to_thread(
+                StorageService.read_object_from_url, photo_url
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed to download photo %s from S3: %s", photo_id, exc
+            )
+            raise RuntimeError(
+                f"Falha ao baixar foto {photo_id} do storage: {exc}"
+            ) from exc
+
+        # Validation: non-empty body
+        if not image_bytes or len(image_bytes) == 0:
+            logger.error("Photo %s returned empty body", photo_id)
+            raise ValueError(f"Foto {photo_id} retornou corpo vazio")
+
+        logger.info(
+            "Photo %s downloaded: %d bytes", photo_id, len(image_bytes)
+        )
+
+        # Validation: try to open with PIL
+        try:
+            img = Image.open(io.BytesIO(image_bytes))
+        except Exception as exc:
+            logger.error(
+                "Photo %s is not a valid image (first 32 bytes: %s): %s",
+                photo_id,
+                image_bytes[:32].hex(),
+                exc,
+            )
+            raise ValueError(
+                f"Foto {photo_id} não é uma imagem válida"
+            ) from exc
 
         if img.mode != "RGB":
             img = img.convert("RGB")
@@ -29,7 +72,7 @@ class ImagePreprocessor:
         img = self._auto_enhance(img)
 
         return {
-            "photo_id": photo["id"],
+            "photo_id": photo_id,
             "image": img,
             "dimensions": f"{img.width}x{img.height}",
             "format": img.format or "JPEG",
