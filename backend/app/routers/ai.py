@@ -1,4 +1,6 @@
+import asyncio
 import logging
+from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
@@ -6,7 +8,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.websocket import manager
-from app.database import get_db
+from app.database import AsyncSessionLocal, get_db
 from app.middleware.auth import get_current_user
 from app.models import Analysis, Photo, Photoshoot
 from app.schemas import APIResponse, AnalysisCreate, AnalysisProgress
@@ -15,6 +17,67 @@ from app.services.ai_service import AIService
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/ai", tags=["ai"])
+
+ANALYSIS_TIMEOUT_SECONDS = 300
+
+
+async def _mark_analysis_failed(analysis_id: str, error_message: str) -> None:
+    """Persist a terminal failure so analyses never remain stuck in processing."""
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(Analysis).where(Analysis.id == analysis_id))
+            analysis = result.scalar_one_or_none()
+            if not analysis or analysis.status == "completed":
+                return
+
+            raw_results = (
+                dict(analysis.raw_results)
+                if isinstance(analysis.raw_results, dict)
+                else {}
+            )
+            raw_results["pipeline_error"] = {
+                "message": error_message,
+                "failed_at": datetime.utcnow().isoformat(),
+            }
+            analysis.raw_results = raw_results
+            analysis.status = "failed"
+            analysis.completed_at = datetime.utcnow()
+            await db.commit()
+    except Exception:
+        logger.exception("Failed to persist terminal state for analysis %s", analysis_id)
+
+
+async def _run_analysis_safely(
+    analysis_id: str,
+    photoshoot_id: str,
+    analysis_types: list[str],
+    tenant_id: str,
+) -> None:
+    """Run the AI pipeline with a hard timeout and terminal failure handling."""
+    logger.info(
+        "Analysis %s background pipeline started for photoshoot %s",
+        analysis_id,
+        photoshoot_id,
+    )
+    try:
+        await asyncio.wait_for(
+            AIService.run_analysis(
+                analysis_id,
+                photoshoot_id,
+                analysis_types,
+                tenant_id,
+            ),
+            timeout=ANALYSIS_TIMEOUT_SECONDS,
+        )
+        logger.info("Analysis %s background pipeline completed", analysis_id)
+    except asyncio.TimeoutError:
+        message = f"analysis_timeout_after_{ANALYSIS_TIMEOUT_SECONDS}s"
+        logger.error("Analysis %s timed out after %ss", analysis_id, ANALYSIS_TIMEOUT_SECONDS)
+        await _mark_analysis_failed(analysis_id, message)
+    except Exception as exc:
+        message = f"{type(exc).__name__}: {exc}"
+        logger.exception("Analysis %s pipeline failed: %s", analysis_id, message)
+        await _mark_analysis_failed(analysis_id, message)
 
 
 @router.post("/analyze", response_model=APIResponse)
@@ -76,7 +139,7 @@ async def analyze_photoshoot(
     )
 
     background_tasks.add_task(
-        AIService.run_analysis,
+        _run_analysis_safely,
         str(analysis.id),
         str(photoshoot_id),
         analysis_request.analysis_types,
