@@ -12,10 +12,12 @@ interface User {
 interface AuthState {
   user: User | null;
   token: string | null;
+  refreshToken: string | null;
   isAuthenticated: boolean;
   setUser: (user: User | null) => void;
   setToken: (token: string | null) => void;
-  login: (user: User, token: string) => void;
+  setTokens: (token: string, refreshToken: string) => void;
+  login: (user: User, token: string, refreshToken?: string | null) => void;
   logout: () => void;
 }
 
@@ -33,16 +35,24 @@ export const useAuthStore = create<AuthState>()(
     (set) => ({
       user: null,
       token: null,
+      refreshToken: null,
       isAuthenticated: false,
       setUser: (user) => set({ user, isAuthenticated: !!user }),
       setToken: (token) => set({ token }),
-      login: (user, token) => {
+      setTokens: (token, refreshToken) =>
+        set({ token, refreshToken, isAuthenticated: true }),
+      login: (user, token, refreshToken = null) => {
         setAuthCookie(true);
-        set({ user, token, isAuthenticated: true });
+        set({ user, token, refreshToken, isAuthenticated: true });
       },
       logout: () => {
         setAuthCookie(false);
-        set({ user: null, token: null, isAuthenticated: false });
+        set({
+          user: null,
+          token: null,
+          refreshToken: null,
+          isAuthenticated: false,
+        });
       },
     }),
     {
