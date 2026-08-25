@@ -50,12 +50,32 @@ const backendAngle: Record<VisagismPhotoAngle, string> = {
   profile: "left_profile",
 };
 
-function extractMessage(error: unknown) {
-  if (error instanceof Error && error.message) return error.message;
+function extractMessage(error: unknown): string {
   if (typeof error === "object" && error && "response" in error) {
-    const response = (error as { response?: { data?: { detail?: string; message?: string } } }).response;
-    return response?.data?.detail || response?.data?.message || "Não foi possível concluir esta etapa.";
+    const response = (
+      error as {
+        response?: {
+          data?: {
+            detail?: string;
+            message?: string;
+          };
+        };
+      }
+    ).response;
+
+    const apiMessage =
+      response?.data?.detail ||
+      response?.data?.message;
+
+    if (apiMessage) {
+      return apiMessage;
+    }
   }
+
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
   return "Não foi possível concluir esta etapa.";
 }
 
