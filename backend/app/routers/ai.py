@@ -29,11 +29,26 @@ async def analyze_photoshoot(
     if not photoshoot:
         raise HTTPException(status_code=404, detail="Photoshoot not found")
 
+    photo_result = await db.execute(
+        select(Photo)
+        .where(
+            and_(
+                Photo.photoshoot_id == photoshoot_id,
+                Photo.tenant_id == current_user.tenant_id,
+            )
+        )
+        .order_by(Photo.created_at.asc())
+        .limit(1)
+    )
+    first_photo = photo_result.scalar_one_or_none()
+    if not first_photo:
+        raise HTTPException(status_code=400, detail="Photoshoot has no photos")
+
     analysis = Analysis(
         tenant_id=current_user.tenant_id,
         photoshoot_id=photoshoot_id,
         profile_id=photoshoot.profile_id,
-        photo_id=photoshoot.photos[0].id if photoshoot.photos else None,
+        photo_id=first_photo.id,
         status="queued"
     )
     db.add(analysis)
