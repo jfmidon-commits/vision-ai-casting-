@@ -26,20 +26,21 @@ class FacialAnalyzer:
         if image is None:
             return self._mock_result()
         
-        mediapipe_task = self.mediapipe.analyze_face_mesh(image)
-        deepface_task = self.deepface.analyze(image)
-        rekognition_task = self._run_rekognition(image)
-        
-        mediapipe_result, deepface_result, rekognition_result = await asyncio.gather(
-            mediapipe_task, deepface_task, rekognition_task,
-            return_exceptions=True
-        )
-        
-        if isinstance(mediapipe_result, Exception):
+        # SEQUENTIAL execution to prevent OOM on 512Mi Render
+        # (was asyncio.gather running all three in parallel)
+        try:
+            mediapipe_result = await self.mediapipe.analyze_face_mesh(image)
+        except Exception:
             mediapipe_result = self.mediapipe._mock_face_mesh()
-        if isinstance(deepface_result, Exception):
+
+        try:
+            deepface_result = await self.deepface.analyze(image)
+        except Exception:
             deepface_result = self.deepface._mock_analysis()
-        if isinstance(rekognition_result, Exception):
+
+        try:
+            rekognition_result = await self._run_rekognition(image)
+        except Exception:
             rekognition_result = {}
         
         face_shape = mediapipe_result.get("face_shape", "unknown")

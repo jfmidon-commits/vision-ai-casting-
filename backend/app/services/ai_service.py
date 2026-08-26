@@ -17,6 +17,7 @@ from app.ai.colorimetry.analyzer import ColorimetryAnalyzer
 from app.ai.grooming.analyzer import GroomingAnalyzer
 from app.ai.photogenic.analyzer import PhotogenicAnalyzer
 from app.ai.consolidator.consolidator import ResultConsolidator
+from app.utils.memory import log_rss
 from app.ai.image_triage.engine import ImageTriageEngine, TriageCategory
 
 
@@ -83,8 +84,10 @@ class AIService:
 
             photos_data = [{"id": str(p.id), "url": p.url, "angle": getattr(p, "angle", None)} for p in photos]
 
+            log_rss("preprocessing_start", analysis_id)
             preprocessor = ImagePreprocessor()
             preprocessed = await preprocessor.process_batch(photos_data)
+            log_rss("preprocessing_end", analysis_id)
 
             # ------------------------------------------------------------------
             # P0.1-C — Triagem obrigatória quando visagism está no pedido
@@ -169,6 +172,7 @@ class AIService:
 
             if not triage_blocked:
                 if "facial" in analysis_types and pipeline_photos:
+                    log_rss("facial_start", analysis_id)
                     facial_out = await FacialAnalyzer().analyze(pipeline_photos)
                     # P0.1-B — never treat mock as measured
                     if _is_facial_mock(facial_out):
@@ -180,28 +184,37 @@ class AIService:
                         engine_errors.append("facial_result_is_mock")
                     else:
                         parallel_results["facial_structure"] = facial_out
+                    log_rss("facial_end", analysis_id)
 
                 if "expressions" in analysis_types:
                     if image_bytes:
+                        log_rss("expressions_start", analysis_id)
                         parallel_results["expressions"] = ExpressionAnalyzer().analyze(image_bytes)
+                        log_rss("expressions_end", analysis_id)
                     else:
                         engine_errors.append("expressions_no_image_bytes")
 
                 if "photogenic" in analysis_types:
                     if image_bytes:
+                        log_rss("photogenic_start", analysis_id)
                         parallel_results["photogenic"] = PhotogenicAnalyzer().analyze(image_bytes)
+                        log_rss("photogenic_end", analysis_id)
                     else:
                         engine_errors.append("photogenic_no_image_bytes")
 
                 if "colorimetry" in analysis_types:
                     if image_bytes:
+                        log_rss("colorimetry_start", analysis_id)
                         parallel_results["colorimetry"] = ColorimetryAnalyzer().analyze(image_bytes)
+                        log_rss("colorimetry_end", analysis_id)
                     else:
                         engine_errors.append("colorimetry_no_image_bytes")
 
                 if "grooming" in analysis_types:
                     if image_bytes:
+                        log_rss("grooming_start", analysis_id)
                         parallel_results["grooming"] = GroomingAnalyzer().analyze(image_bytes)
+                        log_rss("grooming_end", analysis_id)
                     else:
                         engine_errors.append("grooming_no_image_bytes")
 
@@ -230,9 +243,11 @@ class AIService:
                         "data_source": {"measured": False, "llm_interpretation": False},
                     }
                 else:
+                    log_rss("visagism_start", analysis_id)
                     sequential_results["visagism"] = await VisagismAnalyzer().analyze(
                         pipeline_photos, context
                     )
+                    log_rss("visagism_end", analysis_id)
             if "casting" in analysis_types:
                 sequential_results["casting"] = await CastingAnalyzer().analyze(
                     pipeline_photos or preprocessed, context
@@ -244,8 +259,10 @@ class AIService:
 
             all_results = {**parallel_results, **sequential_results}
 
+            log_rss("consolidation_start", analysis_id)
             consolidator = ResultConsolidator()
             consolidated = await consolidator.consolidate(photos_data, all_results, tenant_id)
+            log_rss("consolidation_end", analysis_id)
 
             processing_time = int((time.time() - start_time) * 1000)
 
