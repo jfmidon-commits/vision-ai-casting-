@@ -1,24 +1,12 @@
-import asyncio
 import io
 import os
 import tempfile
 import time
 from datetime import datetime
-from typing import List, Dict, Any, Optional
-from uuid import UUID
+from typing import Any, Dict, List, Optional
 
 from app.ai.preprocessing.preprocessor import ImagePreprocessor
-from app.ai.facial_analysis.analyzer import FacialAnalyzer
-from app.ai.visagism.analyzer import VisagismAnalyzer
-from app.ai.expressions.analyzer import ExpressionAnalyzer
-from app.ai.casting.analyzer import CastingAnalyzer
-from app.ai.branding.analyzer import BrandingAnalyzer
-from app.ai.colorimetry.analyzer import ColorimetryAnalyzer
-from app.ai.grooming.analyzer import GroomingAnalyzer
-from app.ai.photogenic.analyzer import PhotogenicAnalyzer
-from app.ai.consolidator.consolidator import ResultConsolidator
 from app.utils.memory import log_rss
-from app.ai.image_triage.engine import ImageTriageEngine, TriageCategory
 
 
 def _pil_to_jpeg_bytes(img) -> Optional[bytes]:
@@ -27,7 +15,6 @@ def _pil_to_jpeg_bytes(img) -> Optional[bytes]:
         return None
     try:
         buf = io.BytesIO()
-        # Ensure RGB for JPEG
         if hasattr(img, "mode") and img.mode != "RGB":
             img = img.convert("RGB")
         img.save(buf, format="JPEG", quality=95)
@@ -53,7 +40,6 @@ def _is_facial_mock(result: Any) -> bool:
         return True
     sources = result.get("sources") or {}
     if isinstance(sources, dict) and sources:
-        # mock marks every source as "mock"
         vals = list(sources.values())
         if vals and all(v == "mock" for v in vals):
             return True
@@ -64,10 +50,16 @@ def _is_facial_mock(result: Any) -> bool:
 
 class AIService:
     @classmethod
-    async def run_analysis(cls, analysis_id: str, photoshoot_id: str, analysis_types: List[str], tenant_id: str):
+    async def run_analysis(
+        cls,
+        analysis_id: str,
+        photoshoot_id: str,
+        analysis_types: List[str],
+        tenant_id: str,
+    ):
         from app.database import AsyncSessionLocal
+        from app.models import Analysis, Photo
         from sqlalchemy import select
-        from app.models import Analysis, Photo, Photoshoot
 
         async with AsyncSessionLocal() as db:
             result = await db.execute(select(Analysis).where(Analysis.id == analysis_id))
@@ -82,89 +74,111 @@ class AIService:
             )
             photos = result.scalars().all()
 
-            photos_data = [{"id": str(p.id), "url": p.url, "angle": getattr(p, "angle", None)} for p in photos]
+            photos_data = [
+                {
+                    "id": str(p.id),
+                    "url": p.url,
+                    "angle": getattr(p, "angle", None),
+                }
+                for p in photos
+            ]
 
             log_rss("preprocessing_start", analysis_id)
             preprocessor = ImagePreprocessor()
-            preprocessed = await preprocessor.process_batch(photos_data)
+            preprocessed = await preprocessor.process_batch(
+                photos_data,
+                analysis_id=analysis_id,
+            )
             log_rss("preprocessing_end", analysis_id)
 
-            # ------------------------------------------------------------------
-            # P0.1-C — Triagem obrigatória quando visagism está no pedido
-            # ------------------------------------------------------------------
             triage_results: List[Dict] = []
             approved_preprocessed = list(preprocessed)
             triage_blocked = False
 
             if "visagism" in analysis_types:
-                triage_engine = ImageTriageEngine()
                 approved_preprocessed = []
-                for photo_meta, prep in zip(photos_data, preprocessed):
-                    entry = {
-                        "filename": photo_meta.get("id", "unknown"),
-                        "category": TriageCategory.UNKNOWN.value,
-                        "confidence": 0.0,
-                        "selected": False,
-                        "rejection_reasons": [],
-                    }
+                bypass_triage = os.environ.get(
+                    "VISION_BYPASS_TRIAGE", ""
+                ).lower() in ("1", "true", "yes")
 
-                    # BYPASS: aceitar todas as fotos quando VISION_BYPASS_TRIAGE está ativo
-                    if os.environ.get("VISION_BYPASS_TRIAGE", "").lower() in ("1", "true", "yes"):
-                        entry = {
+                if bypass_triage:
+                    for photo_meta, prep in zip(photos_data, preprocessed):
+                        triage_results.append({
                             "filename": photo_meta.get("id", "unknown"),
-                            "category": TriageCategory.FRONTAL.value,
+                            "category": "frontal",
                             "confidence": 1.0,
                             "selected": True,
                             "rejection_reasons": [],
-                        }
+                        })
                         approved_preprocessed.append(prep)
-                        triage_results.append(entry)
-                        continue
+                else:
+                    from app.ai.image_triage.engine import (
+                        ImageTriageEngine,
+                        TriageCategory,
+                    )
 
-                    # Download to temp for triage (engine expects local path)
-                    url = photo_meta.get("url")
-                    tmp_path = None
-                    try:
-                        if url:
-                            import aiohttp
-                            async with aiohttp.ClientSession() as session:
-                                async with session.get(url) as resp:
-                                    raw = await resp.read()
-                            fd, tmp_path = tempfile.mkstemp(suffix=".jpg")
-                            os.write(fd, raw)
-                            os.close(fd)
-                            tr = triage_engine.process_image(tmp_path)
-                            entry = {
-                                "filename": tr.filename,
-                                "category": tr.category.value,
-                                "confidence": tr.confidence,
-                                "selected": tr.selected,
-                                "rejection_reasons": tr.rejection_reasons or [],
-                            }
-                            if (
-                                tr.selected
-                                and tr.category
-                                not in (TriageCategory.REJECTED, TriageCategory.UNKNOWN)
-                            ):
-                                approved_preprocessed.append(prep)
-                        else:
-                            entry["rejection_reasons"] = ["url_missing_for_triage"]
-                    except Exception as exc:
-                        entry["rejection_reasons"] = [f"triage_error: {exc}"]
-                        entry["selected"] = False
-                    finally:
-                        if tmp_path and os.path.exists(tmp_path):
-                            try:
-                                os.unlink(tmp_path)
-                            except OSError:
-                                pass
-                    triage_results.append(entry)
+                    triage_engine = ImageTriageEngine()
+                    for photo_meta, prep in zip(photos_data, preprocessed):
+                        entry = {
+                            "filename": photo_meta.get("id", "unknown"),
+                            "category": TriageCategory.UNKNOWN.value,
+                            "confidence": 0.0,
+                            "selected": False,
+                            "rejection_reasons": [],
+                        }
+
+                        url = photo_meta.get("url")
+                        tmp_path = None
+                        try:
+                            if url:
+                                import aiohttp
+
+                                async with aiohttp.ClientSession() as session:
+                                    async with session.get(url) as resp:
+                                        raw = await resp.read()
+                                fd, tmp_path = tempfile.mkstemp(suffix=".jpg")
+                                os.write(fd, raw)
+                                os.close(fd)
+                                tr = triage_engine.process_image(tmp_path)
+                                entry = {
+                                    "filename": tr.filename,
+                                    "category": tr.category.value,
+                                    "confidence": tr.confidence,
+                                    "selected": tr.selected,
+                                    "rejection_reasons": tr.rejection_reasons or [],
+                                }
+                                if (
+                                    tr.selected
+                                    and tr.category
+                                    not in (
+                                        TriageCategory.REJECTED,
+                                        TriageCategory.UNKNOWN,
+                                    )
+                                ):
+                                    approved_preprocessed.append(prep)
+                            else:
+                                entry["rejection_reasons"] = [
+                                    "url_missing_for_triage"
+                                ]
+                        except Exception as exc:
+                            entry["rejection_reasons"] = [f"triage_error: {exc}"]
+                            entry["selected"] = False
+                        finally:
+                            if tmp_path and os.path.exists(tmp_path):
+                                try:
+                                    os.unlink(tmp_path)
+                                except OSError:
+                                    pass
+                        triage_results.append(entry)
 
                 if not approved_preprocessed:
                     triage_blocked = True
 
-            # Use only approved photos for motor pipeline when visagism requested
-            pipeline_photos = approved_preprocessed if "visagism" in analysis_types else preprocessed
+            pipeline_photos = (
+                approved_preprocessed
+                if "visagism" in analysis_types
+                else preprocessed
+            )
             image_bytes = _first_image_bytes(pipeline_photos)
 
             parallel_results: Dict[str, Any] = {}
@@ -172,14 +186,16 @@ class AIService:
 
             if not triage_blocked:
                 if "facial" in analysis_types and pipeline_photos:
+                    from app.ai.facial_analysis.analyzer import FacialAnalyzer
+
                     log_rss("facial_start", analysis_id)
                     facial_out = await FacialAnalyzer().analyze(pipeline_photos)
-                    # P0.1-B — never treat mock as measured
                     if _is_facial_mock(facial_out):
                         parallel_results["facial_structure"] = {
                             "is_mock": True,
                             "face_shape": None,
-                            "sources": (facial_out or {}).get("sources") or {"mock": "mock"},
+                            "sources": (facial_out or {}).get("sources")
+                            or {"mock": "mock"},
                         }
                         engine_errors.append("facial_result_is_mock")
                     else:
@@ -188,32 +204,48 @@ class AIService:
 
                 if "expressions" in analysis_types:
                     if image_bytes:
+                        from app.ai.expressions.analyzer import ExpressionAnalyzer
+
                         log_rss("expressions_start", analysis_id)
-                        parallel_results["expressions"] = ExpressionAnalyzer().analyze(image_bytes)
+                        parallel_results["expressions"] = ExpressionAnalyzer().analyze(
+                            image_bytes
+                        )
                         log_rss("expressions_end", analysis_id)
                     else:
                         engine_errors.append("expressions_no_image_bytes")
 
                 if "photogenic" in analysis_types:
                     if image_bytes:
+                        from app.ai.photogenic.analyzer import PhotogenicAnalyzer
+
                         log_rss("photogenic_start", analysis_id)
-                        parallel_results["photogenic"] = PhotogenicAnalyzer().analyze(image_bytes)
+                        parallel_results["photogenic"] = PhotogenicAnalyzer().analyze(
+                            image_bytes
+                        )
                         log_rss("photogenic_end", analysis_id)
                     else:
                         engine_errors.append("photogenic_no_image_bytes")
 
                 if "colorimetry" in analysis_types:
                     if image_bytes:
+                        from app.ai.colorimetry.analyzer import ColorimetryAnalyzer
+
                         log_rss("colorimetry_start", analysis_id)
-                        parallel_results["colorimetry"] = ColorimetryAnalyzer().analyze(image_bytes)
+                        parallel_results["colorimetry"] = ColorimetryAnalyzer().analyze(
+                            image_bytes
+                        )
                         log_rss("colorimetry_end", analysis_id)
                     else:
                         engine_errors.append("colorimetry_no_image_bytes")
 
                 if "grooming" in analysis_types:
                     if image_bytes:
+                        from app.ai.grooming.analyzer import GroomingAnalyzer
+
                         log_rss("grooming_start", analysis_id)
-                        parallel_results["grooming"] = GroomingAnalyzer().analyze(image_bytes)
+                        parallel_results["grooming"] = GroomingAnalyzer().analyze(
+                            image_bytes
+                        )
                         log_rss("grooming_end", analysis_id)
                     else:
                         engine_errors.append("grooming_no_image_bytes")
@@ -240,28 +272,48 @@ class AIService:
                             "density": "não medido",
                             "hairline": "não medido",
                         },
-                        "data_source": {"measured": False, "llm_interpretation": False},
+                        "data_source": {
+                            "measured": False,
+                            "llm_interpretation": False,
+                        },
                     }
                 else:
+                    from app.ai.visagism.analyzer import VisagismAnalyzer
+
                     log_rss("visagism_start", analysis_id)
                     sequential_results["visagism"] = await VisagismAnalyzer().analyze(
-                        pipeline_photos, context
+                        pipeline_photos,
+                        context,
                     )
                     log_rss("visagism_end", analysis_id)
+
             if "casting" in analysis_types:
+                from app.ai.casting.analyzer import CastingAnalyzer
+
                 sequential_results["casting"] = await CastingAnalyzer().analyze(
-                    pipeline_photos or preprocessed, context
+                    pipeline_photos or preprocessed,
+                    context,
                 )
+
             if "branding" in analysis_types:
+                from app.ai.branding.analyzer import BrandingAnalyzer
+
                 sequential_results["branding"] = await BrandingAnalyzer().analyze(
-                    pipeline_photos or preprocessed, context
+                    pipeline_photos or preprocessed,
+                    context,
                 )
 
             all_results = {**parallel_results, **sequential_results}
 
+            from app.ai.consolidator.consolidator import ResultConsolidator
+
             log_rss("consolidation_start", analysis_id)
             consolidator = ResultConsolidator()
-            consolidated = await consolidator.consolidate(photos_data, all_results, tenant_id)
+            consolidated = await consolidator.consolidate(
+                photos_data,
+                all_results,
+                tenant_id,
+            )
             log_rss("consolidation_end", analysis_id)
 
             processing_time = int((time.time() - start_time) * 1000)
@@ -285,31 +337,30 @@ class AIService:
     @classmethod
     async def analyze_facial(cls, photo):
         preprocessor = ImagePreprocessor()
-        preprocessed = await preprocessor.process_single({"id": str(photo.id), "url": photo.url})
+        preprocessed = await preprocessor.process_single(
+            {"id": str(photo.id), "url": photo.url}
+        )
+        from app.ai.facial_analysis.analyzer import FacialAnalyzer
+
         analyzer = FacialAnalyzer()
         return await analyzer.analyze_single(preprocessed)
 
     @classmethod
     async def analyze_visagism(cls, photo, parallel_results: Dict = None):
-        """
-        Endpoint direto de visagismo.
-
-        P0.1-D: não aparenta pipeline completo se parallel_results não foi
-        fornecido. Executa preprocess + triagem mínima + analyzers reais
-        quando possible; caso contrário registra limitations explícitas.
-        """
         preprocessor = ImagePreprocessor()
         preprocessed = await preprocessor.process_single(
             {"id": str(photo.id), "url": photo.url}
         )
 
-        # Triagem mínima (uma foto)
+        from app.ai.image_triage.engine import ImageTriageEngine, TriageCategory
+
         triage_results = []
         triage_engine = ImageTriageEngine()
         tmp_path = None
         approved = False
         try:
             import aiohttp
+
             async with aiohttp.ClientSession() as session:
                 async with session.get(photo.url) as resp:
                     raw = await resp.read()
@@ -326,7 +377,8 @@ class AIService:
             })
             approved = (
                 tr.selected
-                and tr.category not in (TriageCategory.REJECTED, TriageCategory.UNKNOWN)
+                and tr.category
+                not in (TriageCategory.REJECTED, TriageCategory.UNKNOWN)
             )
         except Exception as exc:
             triage_results.append({
@@ -352,43 +404,58 @@ class AIService:
                 "primary_hairstyle": None,
                 "confidence": 0.0,
                 "measured_data_used": {},
-                "data_source": {"measured": False, "llm_interpretation": False},
+                "data_source": {
+                    "measured": False,
+                    "llm_interpretation": False,
+                },
             }
 
-        # Build parallel_results if caller did not supply them
         pr = dict(parallel_results or {})
-        image_bytes = _pil_to_jpeg_bytes(preprocessed.get("image") if isinstance(preprocessed, dict) else None)
+        image_bytes = _pil_to_jpeg_bytes(
+            preprocessed.get("image") if isinstance(preprocessed, dict) else None
+        )
 
         if image_bytes:
             if "grooming" not in pr:
                 try:
+                    from app.ai.grooming.analyzer import GroomingAnalyzer
+
                     pr["grooming"] = GroomingAnalyzer().analyze(image_bytes)
                 except Exception:
                     pass
             if "colorimetry" not in pr:
                 try:
+                    from app.ai.colorimetry.analyzer import ColorimetryAnalyzer
+
                     pr["colorimetry"] = ColorimetryAnalyzer().analyze(image_bytes)
                 except Exception:
                     pass
             if "photogenic" not in pr:
                 try:
+                    from app.ai.photogenic.analyzer import PhotogenicAnalyzer
+
                     pr["photogenic"] = PhotogenicAnalyzer().analyze(image_bytes)
                 except Exception:
                     pass
             if "expressions" not in pr:
                 try:
+                    from app.ai.expressions.analyzer import ExpressionAnalyzer
+
                     pr["expressions"] = ExpressionAnalyzer().analyze(image_bytes)
                 except Exception:
                     pass
 
         if "facial_structure" not in pr:
             try:
+                from app.ai.facial_analysis.analyzer import FacialAnalyzer
+
                 facial_out = await FacialAnalyzer().analyze_single(preprocessed)
                 if _is_facial_mock(facial_out):
                     pr["facial_structure"] = {
                         "is_mock": True,
                         "face_shape": None,
-                        "sources": (facial_out or {}).get("sources") or {"mock": "mock"},
+                        "sources": (facial_out or {}).get("sources")
+                        or {"mock": "mock"},
                     }
                 else:
                     pr["facial_structure"] = facial_out
@@ -399,12 +466,18 @@ class AIService:
             "parallel_results": pr,
             "triage_results": triage_results,
         }
+        from app.ai.visagism.analyzer import VisagismAnalyzer
+
         analyzer = VisagismAnalyzer()
         return await analyzer.analyze_single(preprocessed, context=context)
 
     @classmethod
     async def analyze_casting(cls, photo):
         preprocessor = ImagePreprocessor()
-        preprocessed = await preprocessor.process_single({"id": str(photo.id), "url": photo.url})
+        preprocessed = await preprocessor.process_single(
+            {"id": str(photo.id), "url": photo.url}
+        )
+        from app.ai.casting.analyzer import CastingAnalyzer
+
         analyzer = CastingAnalyzer()
         return await analyzer.analyze_single(preprocessed)
