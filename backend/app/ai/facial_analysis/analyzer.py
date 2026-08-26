@@ -120,12 +120,31 @@ class FacialAnalyzer:
         golden_scores = [r["golden_ratio_score"] for r in results if "golden_ratio_score" in r]
         face_shapes = [r["face_shape"] for r in results if "face_shape" in r]
         face_shape = collections.Counter(face_shapes).most_common(1)[0][0] if face_shapes else "unknown"
-        proportions = [r["facial_thirds"] for r in results if "facial_thirds" in r]
-        avg_proportions = {
-            "upper_third": round(sum(p["upper_third"] for p in proportions) / len(proportions), 3),
-            "middle_third": round(sum(p["middle_third"] for p in proportions) / len(proportions), 3),
-            "lower_third": round(sum(p["lower_third"] for p in proportions) / len(proportions), 3),
-        } if proportions else {}
+
+        # Some real MediaPipe results legitimately return an empty/partial
+        # facial_proportions mapping (for example when face geometry cannot
+        # produce a valid total height). Aggregate only numeric values that are
+        # actually present instead of assuming every photo has all three keys.
+        proportions = [
+            r.get("facial_thirds")
+            for r in results
+            if isinstance(r.get("facial_thirds"), dict)
+        ]
+
+        def _average_proportion(key: str):
+            values = [
+                p[key]
+                for p in proportions
+                if isinstance(p.get(key), (int, float))
+            ]
+            return round(sum(values) / len(values), 3) if values else None
+
+        avg_proportions = {}
+        for key in ("upper_third", "middle_third", "lower_third"):
+            value = _average_proportion(key)
+            if value is not None:
+                avg_proportions[key] = value
+
         all_emotions = {}
         for r in results:
             if "emotions" in r and r["emotions"]:
