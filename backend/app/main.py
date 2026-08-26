@@ -119,3 +119,14 @@ async def health_check():
         "commit": os.getenv("RENDER_GIT_COMMIT", "unknown"),
         "deployment_marker": DEPLOYMENT_MARKER,
     }
+
+@app.get("/")
+async def root():
+    return {
+        "name": settings.APP_NAME,
+        "version": settings.APP_VERSION,
+        "commit": os.getenv("RENDER_GIT_COMMIT", "unknown"),
+        "docs": "/docs",
+        "health": "/health",
+        "vision_core": "/api/v1/commands",
+    }
