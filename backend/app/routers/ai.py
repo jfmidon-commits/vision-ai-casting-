@@ -82,13 +82,18 @@ async def _run_analysis_safely(
 
 @router.post("/analyze", response_model=APIResponse)
 async def analyze_photoshoot(
-    request: AnalysisCreate,
-    background_tasks: BackgroundTasks,
     photoshoot_id: UUID,
+    analysis_request: AnalysisCreate,
+    background_tasks: BackgroundTasks,
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Start an AI analysis for a photoshoot."""
+    logger.info(
+        "Starting analysis for photoshoot %s by user %s",
+        photoshoot_id,
+        current_user.id,
+    )
+
     result = await db.execute(
         select(Photoshoot).where(
             and_(
@@ -101,39 +106,52 @@ async def analyze_photoshoot(
     if not photoshoot:
         raise HTTPException(status_code=404, detail="Photoshoot not found")
 
-    photo_result = await db.execute(select(Photo).where(Photo.photoshoot_id == photoshoot_id))
-    photos = photo_result.scalars().all()
-    if not photos:
-        raise HTTPException(status_code=400, detail="No photos found for photoshoot")
+    photo_result = await db.execute(
+        select(Photo)
+        .where(
+            and_(
+                Photo.photoshoot_id == photoshoot_id,
+                Photo.tenant_id == current_user.tenant_id,
+            )
+        )
+        .order_by(Photo.created_at.asc())
+        .limit(1)
+    )
+    first_photo = photo_result.scalar_one_or_none()
+    if not first_photo:
+        raise HTTPException(status_code=400, detail="Photoshoot has no photos")
 
     analysis = Analysis(
-        photoshoot_id=photoshoot_id,
         tenant_id=current_user.tenant_id,
+        photoshoot_id=photoshoot_id,
+        profile_id=photoshoot.profile_id,
+        photo_id=first_photo.id,
         status="queued",
-        analysis_types=request.analysis_types,
     )
     db.add(analysis)
     await db.commit()
     await db.refresh(analysis)
 
     logger.info(
-        "Analysis %s queued for photoshoot %s types=%s",
+        "Analysis %s queued for photoshoot %s; scheduling background task",
         analysis.id,
         photoshoot_id,
-        request.analysis_types,
     )
 
     background_tasks.add_task(
         _run_analysis_safely,
         str(analysis.id),
         str(photoshoot_id),
-        request.analysis_types,
+        analysis_request.analysis_types,
         str(current_user.tenant_id),
     )
 
     return APIResponse(
-        success=True,
-        data={"analysis_id": str(analysis.id), "status": analysis.status},
+        data={
+            "analysis_id": str(analysis.id),
+            "status": "queued",
+            "estimated_time_seconds": 45,
+        },
         message="Analysis started",
     )
 
@@ -157,22 +175,75 @@ async def get_analysis_status(
         raise HTTPException(status_code=404, detail="Analysis not found")
 
     if analysis.status == "failed":
-        pipeline_error = None
+        error_message = "A análise falhou no backend."
         if isinstance(analysis.raw_results, dict):
             pipeline_error = analysis.raw_results.get("pipeline_error")
-        detail = (
-            pipeline_error.get("message")
-            if isinstance(pipeline_error, dict)
-            else "Analysis failed"
-        )
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
+            if isinstance(pipeline_error, dict) and pipeline_error.get("message"):
+                error_message = str(pipeline_error["message"])
+        raise HTTPException(status_code=409, detail=error_message)
 
     return APIResponse(
-        success=True,
         data={
-            "analysis_id": str(analysis.id),
+            "id": str(analysis.id),
             "status": analysis.status,
-            "progress": 100 if analysis.status == "completed" else 50 if analysis.status == "processing" else 0,
-            "completed_at": analysis.completed_at.isoformat() if analysis.completed_at else None,
-        },
+            "processing_time_ms": analysis.processing_time_ms,
+            "completed_at": analysis.completed_at,
+        }
     )
+
+
+@router.post("/analyze/facial", response_model=APIResponse)
+async def analyze_facial(
+    photo_id: UUID,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Photo).where(
+            and_(Photo.id == photo_id, Photo.tenant_id == current_user.tenant_id)
+        )
+    )
+    photo = result.scalar_one_or_none()
+    if not photo:
+        raise HTTPException(status_code=404, detail="Photo not found")
+
+    result = await AIService.analyze_facial(photo)
+    return APIResponse(data=result)
+
+
+@router.post("/analyze/visagism", response_model=APIResponse)
+async def analyze_visagism(
+    photo_id: UUID,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Photo).where(
+            and_(Photo.id == photo_id, Photo.tenant_id == current_user.tenant_id)
+        )
+    )
+    photo = result.scalar_one_or_none()
+    if not photo:
+        raise HTTPException(status_code=404, detail="Photo not found")
+
+    result = await AIService.analyze_visagism(photo)
+    return APIResponse(data=result)
+
+
+@router.post("/analyze/casting", response_model=APIResponse)
+async def analyze_casting(
+    photo_id: UUID,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Photo).where(
+            and_(Photo.id == photo_id, Photo.tenant_id == current_user.tenant_id)
+        )
+    )
+    photo = result.scalar_one_or_none()
+    if not photo:
+        raise HTTPException(status_code=404, detail="Photo not found")
+
+    result = await AIService.analyze_casting(photo)
+    return APIResponse(data=result)
