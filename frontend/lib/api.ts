@@ -66,11 +66,8 @@ async function refreshAccessToken(): Promise<TokenResponse | null> {
     refreshPromise = axios
       .post<TokenResponse>(
         `${apiBaseUrl}/api/v1/auth/refresh`,
-        undefined,
-        {
-          params: { refresh_token: storedRefreshToken },
-          timeout: 30000,
-        }
+        { refresh_token: storedRefreshToken },
+        { timeout: 30000 }
       )
       .then((response) => {
         const accessToken = response.data?.access_token;
@@ -202,17 +199,15 @@ export const authApi = {
   refresh: (refreshToken: string) =>
     api.post(
       "/api/v1/auth/refresh",
-      undefined,
-      operationConfig("renovar sessão", {
-        params: { refresh_token: refreshToken },
-      })
+      { refresh_token: refreshToken },
+      operationConfig("renovar sessão")
     ),
   me: () => api.get("/api/v1/auth/me", operationConfig("validar sessão")),
 };
 
 export const profileApi = {
   list: (params?: any) =>
-    api.get("/api/v1/profiles", operationConfig("carregar perfis", { params })),
+    api.get("/api/v1/profiles", operationConfig("listar perfis", { params })),
   get: (id: string) =>
     api.get(`/api/v1/profiles/${id}`, operationConfig("carregar perfil")),
   create: (data: any) =>
