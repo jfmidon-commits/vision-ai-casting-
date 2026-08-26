@@ -1,7 +1,11 @@
 from uuid import uuid4
 
 from app.ai.image_triage.engine import TriageCategory, TriageResult
-from app.routers.photos import _public_triage_contract
+from app.routers.photos import (
+    _bypass_triage_contract,
+    _public_triage_contract,
+    _triage_bypass_enabled,
+)
 
 
 def test_public_triage_contract_accepts_selected_grounded_category():
@@ -81,3 +85,23 @@ def test_public_triage_contract_does_not_expose_raw_scores_or_metadata():
     assert "scores" not in payload
     assert "metadata" not in payload
     assert "landmarks" not in payload
+
+
+def test_triage_bypass_env_accepts_true_variants(monkeypatch):
+    for value in ("1", "true", "TRUE", "yes", "YES"):
+        monkeypatch.setenv("VISION_BYPASS_TRIAGE", value)
+        assert _triage_bypass_enabled() is True
+
+
+def test_triage_bypass_contract_skips_engine_and_accepts_photo():
+    photo_id = uuid4()
+    payload = _bypass_triage_contract(photo_id)
+
+    assert payload == {
+        "photo_id": str(photo_id),
+        "accepted": True,
+        "category": "frontal",
+        "confidence": 1.0,
+        "selected": True,
+        "rejection_reasons": [],
+    }
