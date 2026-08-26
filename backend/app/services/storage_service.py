@@ -1,7 +1,6 @@
 import boto3
 from botocore.config import Config
 from urllib.parse import urlparse
-from typing import Optional
 
 from app.config import settings
 
@@ -31,7 +30,8 @@ class StorageService:
         """Upload a file to S3 and return (url, thumbnail_url).
 
         This is the original interface used by uploads.py.
-        Thumbnail generation is not yet implemented; returns the same URL."""
+        Thumbnail generation is not yet implemented; returns the same URL.
+        """
         client = cls.get_client()
         ext = file.filename.split(".")[-1].lower()
         key = f"photos/{photo_id}.{ext}"
@@ -49,9 +49,7 @@ class StorageService:
 
     @classmethod
     async def upload_file(cls, file_data: bytes, key: str, content_type: str = "image/jpeg") -> str:
-        """Upload raw bytes to S3 with an explicit key.
-
-        Alternative interface for programmatic uploads."""
+        """Upload raw bytes to S3 with an explicit key."""
         cls.get_client().put_object(
             Bucket=settings.S3_BUCKET,
             Key=key,
@@ -61,15 +59,29 @@ class StorageService:
         return f"https://{settings.S3_BUCKET}.s3.{settings.AWS_REGION}.amazonaws.com/{key}"
 
     @classmethod
-    def read_object_from_url(cls, url: str) -> bytes:
-        """Read an object from this app's private S3 bucket using IAM credentials."""
+    def read_object_from_url(
+        cls,
+        url: str,
+        max_bytes: int = 20 * 1024 * 1024,
+    ) -> bytes:
+        """Read a private S3 object with a hard in-memory size bound."""
         parsed = urlparse(url)
         key = parsed.path.lstrip("/")
         if not key:
             raise ValueError("s3_object_key_missing")
 
         response = cls.get_client().get_object(Bucket=settings.S3_BUCKET, Key=key)
-        return response["Body"].read()
+        content_length = response.get("ContentLength")
+        if content_length is not None and content_length > max_bytes:
+            raise ValueError(
+                f"s3_object_too_large:{content_length}>{max_bytes}"
+            )
+
+        body = response["Body"]
+        data = body.read(max_bytes + 1)
+        if len(data) > max_bytes:
+            raise ValueError(f"s3_object_too_large:>{max_bytes}")
+        return data
 
     @classmethod
     def get_presigned_url(cls, key: str, expires_in: int = 3600):
