@@ -20,6 +20,7 @@ from app.models import Analysis
 logger = get_logger(__name__)
 
 ORPHANED_ANALYSIS_THRESHOLD_MINUTES = 10
+DEPLOYMENT_MARKER = "force-redeploy-2026-08-26-pr66"
 
 
 async def _recover_orphaned_analyses():
@@ -116,15 +117,5 @@ async def health_check():
         "status": "healthy",
         "version": settings.APP_VERSION,
         "commit": os.getenv("RENDER_GIT_COMMIT", "unknown"),
-    }
-
-@app.get("/")
-async def root():
-    return {
-        "name": settings.APP_NAME,
-        "version": settings.APP_VERSION,
-        "commit": os.getenv("RENDER_GIT_COMMIT", "unknown"),
-        "docs": "/docs",
-        "health": "/health",
-        "vision_core": "/api/v1/commands",
+        "deployment_marker": DEPLOYMENT_MARKER,
     }
