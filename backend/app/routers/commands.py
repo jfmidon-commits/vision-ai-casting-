@@ -4,39 +4,55 @@ Commands Router - API REST do Vision Core.
 Endpoint principal para processar comandos dos usuários.
 """
 
+from typing import Any, Dict, Optional
+
 from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.middleware.auth import get_current_user
 from app.models import User
 from app.schemas import APIResponse
-from app.vision_core import VisionCoreService
-from app.agents import (
-    IdentityAgent, VisagismAgent, DigitalTwinAgent,
-    CastingAgent, PortfolioAgent, SocialAgent,
-    OpportunityAgent, ApprovalAgent, AnalyticsAgent,
-    AutomationAgent,
-)
 
 router = APIRouter(prefix="/api/v1/commands", tags=["commands"])
 
-# Inicializa o Vision Core com todos os agentes
-vision_core = VisionCoreService()
-vision_core.register_agents([
-    IdentityAgent(),
-    VisagismAgent(),
-    DigitalTwinAgent(),
-    CastingAgent(),
-    PortfolioAgent(),
-    SocialAgent(),
-    OpportunityAgent(),
-    ApprovalAgent(),
-    AnalyticsAgent(),
-    AutomationAgent(),
-])
+_vision_core = None
+
+
+def _get_vision_core():
+    """Initialize Vision Core and its agents only when command APIs are used."""
+    global _vision_core
+    if _vision_core is None:
+        from app.agents import (
+            AnalyticsAgent,
+            ApprovalAgent,
+            AutomationAgent,
+            CastingAgent,
+            DigitalTwinAgent,
+            IdentityAgent,
+            OpportunityAgent,
+            PortfolioAgent,
+            SocialAgent,
+            VisagismAgent,
+        )
+        from app.vision_core import VisionCoreService
+
+        vision_core = VisionCoreService()
+        vision_core.register_agents([
+            IdentityAgent(),
+            VisagismAgent(),
+            DigitalTwinAgent(),
+            CastingAgent(),
+            PortfolioAgent(),
+            SocialAgent(),
+            OpportunityAgent(),
+            ApprovalAgent(),
+            AnalyticsAgent(),
+            AutomationAgent(),
+        ])
+        _vision_core = vision_core
+    return _vision_core
 
 
 class CommandRequest(BaseModel):
@@ -51,12 +67,8 @@ async def process_command(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Endpoint principal do Vision Core.
-
-    Recebe comandos de texto ou voz e os processa através
-    do orquestrador central.
-    """
+    """Process a text or voice command through Vision Core."""
+    vision_core = _get_vision_core()
     result = await vision_core.process_command(
         user_id=current_user.id,
         tenant_id=current_user.tenant_id,
@@ -77,7 +89,8 @@ async def get_command_history(
     current_user: User = Depends(get_current_user),
     limit: int = 50,
 ):
-    """Retorna histórico de comandos do usuário."""
+    """Return command history for the current user."""
+    vision_core = _get_vision_core()
     history = vision_core.get_command_history(
         user_id=current_user.id,
         limit=limit,
@@ -87,5 +100,6 @@ async def get_command_history(
 
 @router.get("/health", response_model=APIResponse)
 async def get_vision_core_health():
-    """Retorna saúde do Vision Core."""
+    """Return Vision Core health, initializing it only on demand."""
+    vision_core = _get_vision_core()
     return APIResponse(data=vision_core.get_health())
