@@ -1,75 +1,152 @@
-import cv2
+import asyncio
+import io
+from typing import Dict, List, Optional
+
 import numpy as np
 from PIL import Image, ImageEnhance
-from typing import Dict, List
-import io
-import asyncio
-import logging
 
 from app.services.storage_service import StorageService
+from app.utils.logger import get_logger
+from app.utils.memory import log_rss
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+
 
 class ImagePreprocessor:
-    """Preprocessor otimizado para baixa memória (Render 512Mi)."""
-    TARGET_SIZE = 1024  # Reduzido de 2048 para economizar ~75% de memória
-    THUMBNAIL_SIZE = 512
+    """Preprocessor optimized for low-memory Render instances."""
 
-    async def process_batch(self, photos: List[Dict]) -> List[Dict]:
-        """Processa fotos sequencialmente em vez de simultaneamente para evitar OOM."""
+    TARGET_SIZE = 1024
+    THUMBNAIL_SIZE = 512
+    MAX_IMAGE_BYTES = 20 * 1024 * 1024
+
+    async def process_batch(
+        self,
+        photos: List[Dict],
+        analysis_id: Optional[str] = None,
+    ) -> List[Dict]:
+        """Process photos sequentially to avoid concurrent memory spikes."""
         results = []
         for photo in photos:
-            result = await self.process_single(photo)
+            result = await self.process_single(photo, analysis_id=analysis_id)
             results.append(result)
         return results
 
-    async def process_single(self, photo: Dict) -> Dict:
+    async def process_single(
+        self,
+        photo: Dict,
+        analysis_id: Optional[str] = None,
+    ) -> Dict:
         photo_id = photo.get("id", "unknown")
         photo_url = photo.get("url", "")
+        rss_analysis_id = analysis_id or "unknown"
 
-        logger.info("Preprocessing photo %s", photo_id)
+        logger.info("[PREPROCESS] photo=%s stage=start analysis_id=%s", photo_id, rss_analysis_id)
 
-        # Download via S3 SDK com timeout via asyncio.wait_for
+        logger.info(
+            "[PREPROCESS] photo=%s stage=download_start analysis_id=%s",
+            photo_id,
+            rss_analysis_id,
+        )
+        log_rss(f"preprocess_{photo_id}_download_start", rss_analysis_id)
         try:
             image_bytes = await asyncio.wait_for(
-                asyncio.to_thread(StorageService.read_object_from_url, photo_url),
+                asyncio.to_thread(
+                    StorageService.read_object_from_url,
+                    photo_url,
+                    self.MAX_IMAGE_BYTES,
+                ),
                 timeout=30,
             )
         except asyncio.TimeoutError as exc:
-            logger.error("Timeout downloading photo %s after 30s", photo_id)
+            logger.error(
+                "[PREPROCESS] photo=%s stage=download_timeout analysis_id=%s",
+                photo_id,
+                rss_analysis_id,
+            )
             raise RuntimeError(
                 f"Timeout ao baixar foto {photo_id} do storage"
             ) from exc
         except Exception as exc:
-            logger.error("Failed to download photo %s: %s", photo_id, exc)
+            logger.error(
+                "[PREPROCESS] photo=%s stage=download_error analysis_id=%s error=%s",
+                photo_id,
+                rss_analysis_id,
+                exc,
+            )
             raise RuntimeError(
                 f"Falha ao baixar foto {photo_id}: {exc}"
             ) from exc
 
-        if not image_bytes or len(image_bytes) == 0:
+        if not image_bytes:
             raise ValueError(f"Foto {photo_id} retornou corpo vazio")
 
-        logger.info("Photo %s: %d bytes", photo_id, len(image_bytes))
+        logger.info(
+            "[PREPROCESS] photo=%s stage=download_end analysis_id=%s bytes=%d",
+            photo_id,
+            rss_analysis_id,
+            len(image_bytes),
+        )
+        log_rss(f"preprocess_{photo_id}_download_end", rss_analysis_id)
 
-        # Open with PIL
+        logger.info(
+            "[PREPROCESS] photo=%s stage=decode_start analysis_id=%s",
+            photo_id,
+            rss_analysis_id,
+        )
+        log_rss(f"preprocess_{photo_id}_decode_start", rss_analysis_id)
         try:
-            img = Image.open(io.BytesIO(image_bytes))
+            img = await asyncio.to_thread(self._decode_image, image_bytes)
         except Exception as exc:
             logger.error(
-                "Photo %s invalid (hex: %s): %s",
+                "[PREPROCESS] photo=%s stage=decode_error analysis_id=%s error=%s",
                 photo_id,
-                image_bytes[:32].hex(),
+                rss_analysis_id,
                 exc,
             )
             raise ValueError(f"Foto {photo_id} não é imagem válida") from exc
 
-        if img.mode != "RGB":
-            img = img.convert("RGB")
+        logger.info(
+            "[PREPROCESS] photo=%s stage=decode_end analysis_id=%s dims=%dx%d",
+            photo_id,
+            rss_analysis_id,
+            img.width,
+            img.height,
+        )
+        log_rss(f"preprocess_{photo_id}_decode_end", rss_analysis_id)
 
-        img = self._resize_maintaining_ratio(img, self.TARGET_SIZE)
-        img = self._normalize_colors(img)
-        img = self._auto_enhance(img)
+        logger.info(
+            "[PREPROCESS] photo=%s stage=resize_start analysis_id=%s",
+            photo_id,
+            rss_analysis_id,
+        )
+        img = await asyncio.to_thread(
+            self._resize_maintaining_ratio,
+            img,
+            self.TARGET_SIZE,
+        )
+        logger.info(
+            "[PREPROCESS] photo=%s stage=resize_end analysis_id=%s dims=%dx%d",
+            photo_id,
+            rss_analysis_id,
+            img.width,
+            img.height,
+        )
+        log_rss(f"preprocess_{photo_id}_resize_end", rss_analysis_id)
 
+        logger.info(
+            "[PREPROCESS] photo=%s stage=normalize_start analysis_id=%s",
+            photo_id,
+            rss_analysis_id,
+        )
+        img = await asyncio.to_thread(self._normalize_and_enhance, img)
+        logger.info(
+            "[PREPROCESS] photo=%s stage=normalize_end analysis_id=%s",
+            photo_id,
+            rss_analysis_id,
+        )
+        log_rss(f"preprocess_{photo_id}_normalize_end", rss_analysis_id)
+
+        logger.info("[PREPROCESS] photo=%s stage=end analysis_id=%s", photo_id, rss_analysis_id)
         return {
             "photo_id": photo_id,
             "image": img,
@@ -77,6 +154,17 @@ class ImagePreprocessor:
             "format": img.format or "JPEG",
             "mode": img.mode,
         }
+
+    def _decode_image(self, image_bytes: bytes) -> Image.Image:
+        img = Image.open(io.BytesIO(image_bytes))
+        img.load()
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+        return img
+
+    def _normalize_and_enhance(self, img: Image.Image) -> Image.Image:
+        img = self._normalize_colors(img)
+        return self._auto_enhance(img)
 
     def _resize_maintaining_ratio(self, img: Image.Image, max_size: int) -> Image.Image:
         if max(img.width, img.height) > max_size:
