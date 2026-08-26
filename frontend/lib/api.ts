@@ -207,7 +207,7 @@ export const authApi = {
 
 export const profileApi = {
   list: (params?: any) =>
-    api.get("/api/v1/profiles", operationConfig("listar perfis", { params })),
+    api.get("/api/v1/profiles", operationConfig("carregar perfis", { params })),
   get: (id: string) =>
     api.get(`/api/v1/profiles/${id}`, operationConfig("carregar perfil")),
   create: (data: any) =>
