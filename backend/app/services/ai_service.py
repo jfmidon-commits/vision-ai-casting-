@@ -184,39 +184,39 @@ class AIService:
                         engine_errors.append("facial_result_is_mock")
                     else:
                         parallel_results["facial_structure"] = facial_out
-                        log_rss("facial_end", analysis_id)
+                    log_rss("facial_end", analysis_id)
 
                 if "expressions" in analysis_types:
                     if image_bytes:
                         log_rss("expressions_start", analysis_id)
                         parallel_results["expressions"] = ExpressionAnalyzer().analyze(image_bytes)
+                        log_rss("expressions_end", analysis_id)
                     else:
                         engine_errors.append("expressions_no_image_bytes")
-                        log_rss("expressions_end", analysis_id)
 
                 if "photogenic" in analysis_types:
                     if image_bytes:
                         log_rss("photogenic_start", analysis_id)
                         parallel_results["photogenic"] = PhotogenicAnalyzer().analyze(image_bytes)
+                        log_rss("photogenic_end", analysis_id)
                     else:
                         engine_errors.append("photogenic_no_image_bytes")
-                        log_rss("photogenic_end", analysis_id)
 
                 if "colorimetry" in analysis_types:
                     if image_bytes:
                         log_rss("colorimetry_start", analysis_id)
                         parallel_results["colorimetry"] = ColorimetryAnalyzer().analyze(image_bytes)
+                        log_rss("colorimetry_end", analysis_id)
                     else:
                         engine_errors.append("colorimetry_no_image_bytes")
-                        log_rss("colorimetry_end", analysis_id)
 
                 if "grooming" in analysis_types:
                     if image_bytes:
                         log_rss("grooming_start", analysis_id)
                         parallel_results["grooming"] = GroomingAnalyzer().analyze(image_bytes)
+                        log_rss("grooming_end", analysis_id)
                     else:
                         engine_errors.append("grooming_no_image_bytes")
-                        log_rss("grooming_end", analysis_id)
 
             context = {
                 "parallel_results": parallel_results,
@@ -245,9 +245,9 @@ class AIService:
                 else:
                     log_rss("visagism_start", analysis_id)
                     sequential_results["visagism"] = await VisagismAnalyzer().analyze(
-                    log_rss("visagism_end", analysis_id)
                         pipeline_photos, context
                     )
+                    log_rss("visagism_end", analysis_id)
             if "casting" in analysis_types:
                 sequential_results["casting"] = await CastingAnalyzer().analyze(
                     pipeline_photos or preprocessed, context
