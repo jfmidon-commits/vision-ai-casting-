@@ -12,8 +12,10 @@ from app.middleware.auth import get_current_user
 from app.models import Photo
 from app.schemas import APIResponse, PhotoBase, PhotoResponse
 from app.services.storage_service import StorageService
+from app.utils.logger import get_logger
 
 router = APIRouter(prefix="/api/v1/photos", tags=["photos"])
+logger = get_logger(__name__)
 
 
 def _public_triage_contract(photo_id: UUID, result=None, reason: str | None = None):
@@ -41,6 +43,21 @@ def _public_triage_contract(photo_id: UUID, result=None, reason: str | None = No
         "confidence": float(result.confidence),
         "selected": selected,
         "rejection_reasons": list(result.rejection_reasons or []),
+    }
+
+
+def _triage_bypass_enabled() -> bool:
+    return os.environ.get("VISION_BYPASS_TRIAGE", "").lower() in ("1", "true", "yes")
+
+
+def _bypass_triage_contract(photo_id: UUID):
+    return {
+        "photo_id": str(photo_id),
+        "accepted": True,
+        "category": TriageCategory.FRONTAL.value,
+        "confidence": 1.0,
+        "selected": True,
+        "rejection_reasons": [],
     }
 
 
@@ -81,6 +98,16 @@ async def triage_photo(
     if not photo:
         raise HTTPException(status_code=404, detail="Photo not found")
 
+    # Production currently has VISION_BYPASS_TRIAGE=true. Respect the same
+    # switch used by the full analysis pipeline so the mobile upload flow does
+    # not invoke heavyweight MediaPipe triage before the analysis is queued.
+    if _triage_bypass_enabled():
+        logger.info("Photo %s triage bypassed via VISION_BYPASS_TRIAGE", photo_id)
+        return APIResponse(
+            data=_bypass_triage_contract(photo_id),
+            message="Photo triage bypassed",
+        )
+
     tmp_path = None
     try:
         raw = StorageService.read_object_from_url(photo.url)
@@ -93,7 +120,8 @@ async def triage_photo(
         triage_result = ImageTriageEngine().process_image(tmp_path)
         public = _public_triage_contract(photo_id, triage_result)
         return APIResponse(data=public, message="Photo triage completed")
-    except Exception:
+    except Exception as exc:
+        logger.exception("Photo %s triage failed: %s", photo_id, exc)
         public = _public_triage_contract(photo_id, reason="triage_error")
         return APIResponse(data=public, message="Photo triage blocked safely")
     finally:
