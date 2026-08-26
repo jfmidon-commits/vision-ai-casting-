@@ -1,5 +1,4 @@
 import asyncio
-import logging
 from datetime import datetime
 from uuid import UUID
 
@@ -13,8 +12,9 @@ from app.middleware.auth import get_current_user
 from app.models import Analysis, Photo, Photoshoot
 from app.schemas import APIResponse, AnalysisCreate, AnalysisProgress
 from app.services.ai_service import AIService
+from app.utils.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/v1/ai", tags=["ai"])
 
