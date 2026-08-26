@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -111,13 +112,18 @@ app.include_router(websocket_router)
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "version": settings.APP_VERSION}
+    return {
+        "status": "healthy",
+        "version": settings.APP_VERSION,
+        "commit": os.getenv("RENDER_GIT_COMMIT", "unknown"),
+    }
 
 @app.get("/")
 async def root():
     return {
         "name": settings.APP_NAME,
         "version": settings.APP_VERSION,
+        "commit": os.getenv("RENDER_GIT_COMMIT", "unknown"),
         "docs": "/docs",
         "health": "/health",
         "vision_core": "/api/v1/commands",
