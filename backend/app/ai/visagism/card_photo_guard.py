@@ -1,14 +1,7 @@
 """Hard guard for visagism card media.
 
-A visagism card must always carry at least one REAL source photo of the person
-being analysed. Generated/simulated media may never replace that source photo.
-
-The guard is intentionally fail-closed:
-- ``personPhoto`` is always an original input photo;
-- ``displayImage`` may be a validated simulation, but only when its immutable
-  base is exactly the selected original photo and identity lock approved it;
-- if provenance or identity approval is absent, the card displays the original;
-- card builders are forbidden from accepting arbitrary generated portraits.
+A card always carries at least one REAL source photo. A validated haircut
+simulation may be displayed, but can never replace provenance of that source.
 """
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Mapping, Optional
@@ -19,7 +12,6 @@ class CardPhotoGuardError(ValueError):
 
 
 def _photo_value(photo: Mapping[str, Any]) -> Optional[Any]:
-    """Return the canonical photo reference without fabricating one."""
     for key in ("url", "path", "image", "src"):
         value = photo.get(key)
         if value:
@@ -29,8 +21,6 @@ def _photo_value(photo: Mapping[str, Any]) -> Optional[Any]:
 
 @dataclass(frozen=True)
 class CardPhotoGuard:
-    """Build card media while preserving an immutable real-person anchor."""
-
     def real_photo_refs(self, photos: Iterable[Mapping[str, Any]]) -> List[Any]:
         refs: List[Any] = []
         for photo in photos:
@@ -60,12 +50,6 @@ class CardPhotoGuard:
         publication: Optional[Mapping[str, Any]] = None,
         preferred_original: Optional[Any] = None,
     ) -> Dict[str, Any]:
-        """Return a card-safe media contract.
-
-        ``personPhoto`` is mandatory and always points to a real input photo.
-        A simulation can only become ``displayImage`` after IdentityLock has
-        approved it and its base layer matches that exact real input photo.
-        """
         original = self.select_person_photo(photos, preferred_original)
         refs = self.real_photo_refs(photos)
 
@@ -91,6 +75,7 @@ class CardPhotoGuard:
             publication.get("simulationApplied") is True
             and publication.get("identityVerified") is True
             and publication.get("simulationBlocked") is not True
+            and publication.get("mode") == "hair_overlay"
             and candidate is not None
             and base == original
             and base in refs
@@ -100,7 +85,7 @@ class CardPhotoGuard:
             media.update(
                 {
                     "displayImage": candidate,
-                    "displayMode": "validated_hair_beard_overlay",
+                    "displayMode": "validated_hair_overlay",
                     "simulationApplied": True,
                     "identityVerified": True,
                     "fallbackUsed": False,
