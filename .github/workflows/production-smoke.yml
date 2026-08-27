@@ -22,13 +22,13 @@ jobs:
       - name: Resolve latest backend revision
         id: expected
         run: |
-          expected_sha="$(git log -1 --format=%H -- backend)"
+          expected_sha="$(git log --first-parent -1 --format=%H -- backend)"
           if [ -z "${expected_sha}" ]; then
             echo "Could not resolve a backend revision."
             exit 1
           fi
           echo "sha=${expected_sha}" >> "$GITHUB_OUTPUT"
-          echo "Latest backend revision: ${expected_sha}"
+          echo "Latest backend revision on main first-parent history: ${expected_sha}"
 
       - name: Wait for the expected backend revision on Render
         env:
