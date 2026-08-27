@@ -37,6 +37,18 @@ def _image(value=80):
     return Image.fromarray(np.full((200, 200, 3), value, dtype=np.uint8), mode="RGB")
 
 
+def _all_person(rgb):
+    return np.ones(rgb.shape[:2], dtype=np.float32)
+
+
+def _adapter(*, detector=None, **kwargs):
+    return MediaPipeHairBeardMaskAdapter(
+        detector=detector or (lambda _img: _synthetic_landmarks()),
+        person_segmenter=_all_person,
+        **kwargs,
+    )
+
+
 class AlwaysPassVerifier:
     def compare(self, candidate, reference):
         return 0.90
@@ -59,18 +71,19 @@ class FullFrameRenderer:
 
 
 def test_mask_adapter_builds_conservative_hair_roi():
-    adapter = MediaPipeHairBeardMaskAdapter(detector=lambda _img: _synthetic_landmarks())
+    adapter = _adapter()
     result = adapter.build_hair_beard_mask(_image())
 
     assert result["valid"] is True
     assert result["protected_regions_touched"] is False
     assert result["beard_enabled"] is False
-    assert 0.03 <= result["coverage_ratio"] <= 0.45
+    assert result["background_locked"] is True
+    assert 0.02 <= result["coverage_ratio"] <= 0.45
     assert result["mask"].shape == (200, 200)
 
 
 def test_mask_adapter_fails_closed_without_face():
-    adapter = MediaPipeHairBeardMaskAdapter(detector=lambda _img: None)
+    adapter = _adapter(detector=lambda _img: None)
     result = adapter.build_hair_beard_mask(_image())
 
     assert result["valid"] is False
@@ -79,22 +92,17 @@ def test_mask_adapter_fails_closed_without_face():
 
 
 def test_mask_adapter_blocks_coverage_out_of_range():
-    adapter = MediaPipeHairBeardMaskAdapter(
-        detector=lambda _img: _synthetic_landmarks(),
-        coverage_max=0.01,
-    )
+    adapter = _adapter(coverage_max=0.01)
     result = adapter.build_hair_beard_mask(_image())
 
     assert result["valid"] is False
     assert result["reason"] == "hair_roi_coverage_out_of_range"
-    assert result["calibration_status"] == "provisional"
+    assert result["calibration_status"] == "conservative_person_intersection"
     assert result["coverage_ratio"] > adapter.coverage_max
 
 
 def test_mask_adapter_blocks_protected_region_overlap():
-    adapter = MediaPipeHairBeardMaskAdapter(
-        detector=lambda _img: _synthetic_landmarks_with_protected_overlap()
-    )
+    adapter = _adapter(detector=lambda _img: _synthetic_landmarks_with_protected_overlap())
     result = adapter.build_hair_beard_mask(_image())
 
     assert result["valid"] is False
@@ -144,8 +152,7 @@ def test_arcface_missing_deepface_dependency_fails_closed():
 def test_service_without_provider_is_blocked_and_card_shows_original():
     original = _image(70)
     refs = [_image(71), _image(72), _image(73)]
-    adapter = MediaPipeHairBeardMaskAdapter(detector=lambda _img: _synthetic_landmarks())
-    service = VisagismSimulationService(mask_adapter=adapter, verifier=AlwaysPassVerifier())
+    service = VisagismSimulationService(mask_adapter=_adapter(), verifier=AlwaysPassVerifier())
 
     result = service.simulate(
         original_photo=original,
@@ -165,7 +172,7 @@ def test_service_without_provider_is_blocked_and_card_shows_original():
 def test_service_not_requested_keeps_original_card_media():
     original = _image(70)
     service = VisagismSimulationService(
-        mask_adapter=MediaPipeHairBeardMaskAdapter(detector=lambda _img: None),
+        mask_adapter=_adapter(detector=lambda _img: None),
         verifier=AlwaysPassVerifier(),
     )
 
@@ -184,8 +191,11 @@ def test_service_not_requested_keeps_original_card_media():
 def test_service_blocks_invalid_reference_count_before_generation():
     original = _image(70)
     refs = [_image(71), _image(72)]
-    adapter = MediaPipeHairBeardMaskAdapter(detector=lambda _img: _synthetic_landmarks())
-    service = VisagismSimulationService(mask_adapter=adapter, verifier=AlwaysPassVerifier())
+    service = VisagismSimulationService(
+        mask_adapter=_adapter(),
+        verifier=AlwaysPassVerifier(),
+        renderer=FullFrameRenderer(),
+    )
 
     result = service.simulate(
         original_photo=original,
@@ -204,7 +214,7 @@ def test_service_blocks_invalid_reference_count_before_generation():
 def test_service_ready_path_is_pixel_locked_and_identity_guarded():
     original = _image(60)
     refs = [_image(61), _image(62), _image(63)]
-    adapter = MediaPipeHairBeardMaskAdapter(detector=lambda _img: _synthetic_landmarks())
+    adapter = _adapter()
     service = VisagismSimulationService(
         mask_adapter=adapter,
         verifier=AlwaysPassVerifier(),
@@ -222,7 +232,7 @@ def test_service_ready_path_is_pixel_locked_and_identity_guarded():
     assert result["simulation_status"] == "ready"
     assert result["card_media"]["simulationApplied"] is True
     candidate = result["card_media"]["displayImage"]
-    mask = adapter.build_hair_beard_mask(original)["mask"] > 0
+    mask = adapter.build_hair_mask(original)["mask"] > 0
     original_arr = np.asarray(original)
     candidate_arr = np.asarray(candidate)
     assert np.array_equal(candidate_arr[~mask], original_arr[~mask])
@@ -239,8 +249,11 @@ def test_service_blocks_when_reference_identity_gate_fails():
 
     original = _image(60)
     refs = [_image(61), _image(62), _image(63)]
-    adapter = MediaPipeHairBeardMaskAdapter(detector=lambda _img: _synthetic_landmarks())
-    service = VisagismSimulationService(mask_adapter=adapter, verifier=OneFailVerifier())
+    service = VisagismSimulationService(
+        mask_adapter=_adapter(),
+        verifier=OneFailVerifier(),
+        renderer=FullFrameRenderer(),
+    )
 
     result = service.simulate(
         original_photo=original,
