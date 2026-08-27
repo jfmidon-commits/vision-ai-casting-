@@ -84,13 +84,14 @@ def _public_simulation_contract(
     barber_brief: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     ready = simulation_status == "ready" and bool(display_url)
+    public_status = "ready" if ready else ("blocked" if simulation_status == "ready" else simulation_status)
     return {
         "analysis_id": str(analysis_id),
         "selected_haircut": haircut_name,
-        "simulation_status": "ready" if ready else simulation_status,
+        "simulation_status": public_status,
         "reason": None if ready else reason or "simulation_blocked",
         "provider_configured": provider_configured,
-        "ready_enabled": bool(ready_enabled or ready),
+        "ready_enabled": bool(ready),
         "reference_count": reference_count,
         "cached": cached,
         "barber_brief": barber_brief,
