@@ -1,5 +1,7 @@
-from pydantic_settings import BaseSettings
 from functools import lru_cache
+
+from pydantic_settings import BaseSettings
+
 
 class Settings(BaseSettings):
     APP_NAME: str = "Vision AI Casting"
@@ -7,7 +9,9 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     ENVIRONMENT: str = "development"
 
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/vision_ai_casting"
+    DATABASE_URL: str = (
+        "postgresql+asyncpg://postgres:postgres@localhost:5432/vision_ai_casting"
+    )
     DATABASE_POOL_SIZE: int = 20
     DATABASE_MAX_OVERFLOW: int = 10
 
@@ -18,6 +22,17 @@ class Settings(BaseSettings):
     OPENAI_MODEL: str = "gpt-4o"
     OPENAI_MAX_TOKENS: int = 2500
     OPENAI_TEMPERATURE: float = 0.3
+
+    # Identity-safe visual haircut simulation. Disabled by default and enabled
+    # only when an explicit provider + server-side credential are configured.
+    VISAGISM_SIMULATION_PROVIDER: str = "disabled"
+    VISAGISM_SIMULATION_MODEL: str = "fal-ai/flux-general/inpainting"
+    VISAGISM_SIMULATION_TIMEOUT_SECONDS: int = 120
+    VISAGISM_SIMULATION_MAX_PIXELS: int = 1_048_576
+    VISAGISM_SIMULATION_MAX_ATTEMPTS_PER_ANALYSIS: int = 8
+    VISAGISM_SIMULATION_BUDGET_WINDOW_SECONDS: int = 3600
+    VISAGISM_IDENTITY_PROVIDER: str = "disabled"
+    FAL_KEY: str = ""
 
     AWS_ACCESS_KEY_ID: str = ""
     AWS_SECRET_ACCESS_KEY: str = ""
@@ -67,8 +82,10 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
 
+
 @lru_cache()
 def get_settings() -> Settings:
     return Settings()
+
 
 settings = get_settings()

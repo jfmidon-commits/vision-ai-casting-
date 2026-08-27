@@ -4,10 +4,10 @@ This module does not decide haircuts and does not invent measurements. It only
 translates the already-grounded analyzer output into a stable, user-facing
 contract that can be persisted in Analysis.visagism and consumed by mobile.
 """
+
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
-
 
 _LIMITATION_COPY = {
     "all_photos_rejected_by_triage": "As fotos enviadas não passaram na triagem automática.",
@@ -23,6 +23,8 @@ _LIMITATION_COPY = {
     "no_grounded_hairstyles": "Não houve dados suficientes para recomendar um corte com segurança.",
     "llm_unavailable": "A interpretação avançada não estava disponível nesta sessão.",
     "llm_unavailable_rule_based_recommendations": "A interpretação avançada não estava disponível; as recomendações foram montadas de forma conservadora a partir das medições confirmadas.",
+    "llm_unavailable_personalized_rule_based_recommendations": "A interpretação avançada não estava disponível; as recomendações foram personalizadas apenas com as medições faciais e capilares confirmadas desta sessão.",
+    "fallback_insufficient_personalization": "As medições confirmadas não foram suficientes para diferenciar recomendações com segurança; por isso nenhuma lista genérica foi exibida.",
     "fallback_no_grounded_face_shape": "Sem formato facial medido, o sistema não gerou recomendações de contingência.",
 }
 
@@ -132,7 +134,9 @@ def _translate_limitation(code: Any) -> str:
     if raw == "primary_hairstyle_not_in_recommendations":
         return "A recomendação principal foi ajustada para uma opção presente na lista validada."
     if raw.lower().startswith("error:"):
-        return "O serviço de interpretação encontrou uma limitação técnica nesta sessão."
+        return (
+            "O serviço de interpretação encontrou uma limitação técnica nesta sessão."
+        )
     return "Uma parte da análise não pôde ser confirmada com segurança."
 
 
@@ -144,7 +148,9 @@ def _confidence_note(confidence: Any, has_measured: bool) -> str:
     if not has_measured or value < 0.5:
         return "A análise tem base limitada; considere novas fotos antes de decidir o corte."
     if value < 0.75:
-        return "A análise tem uma base razoável, com alguns pontos ainda não confirmados."
+        return (
+            "A análise tem uma base razoável, com alguns pontos ainda não confirmados."
+        )
     return "A análise tem boa base nos dados disponíveis desta sessão."
 
 
@@ -154,7 +160,9 @@ def _professional_positioning(name: str, face_shape: Optional[str]) -> str:
     return f"A opção {name} foi mantida por estar entre as recomendações validadas pelo analisador."
 
 
-def _barber_guidance(name: Optional[str], current_hair: Dict[str, Any]) -> Dict[str, str]:
+def _barber_guidance(
+    name: Optional[str], current_hair: Dict[str, Any]
+) -> Dict[str, str]:
     if name and name in _RULE_BASED_BARBER_GUIDANCE:
         return dict(_RULE_BASED_BARBER_GUIDANCE[name])
     return {
@@ -162,7 +170,8 @@ def _barber_guidance(name: Optional[str], current_hair: Dict[str, Any]) -> Dict[
         "sides": "definir a transição de acordo com o corte escolhido e o caimento real",
         "back": "acompanhar o desenho das laterais e o formato natural da cabeça",
         "fringe": "adaptar ao corte escolhido e ao comportamento natural do cabelo",
-        "texture": _clean_text(current_hair.get("texture")) or "avaliar presencialmente antes de finalizar",
+        "texture": _clean_text(current_hair.get("texture"))
+        or "avaliar presencialmente antes de finalizar",
         "finish": "definir com o profissional conforme o corte escolhido",
         "avoid": "não inventar medidas nem forçar um acabamento incompatível com o cabelo real",
     }
@@ -180,9 +189,19 @@ def build_visagism_interpretation(analysis: Dict[str, Any]) -> Dict[str, Any]:
     if primary not in hairstyles:
         primary = hairstyles[0] if hairstyles else None
 
-    measured = source.get("measured_data_used") if isinstance(source.get("measured_data_used"), dict) else {}
-    current_hair = source.get("current_hair") if isinstance(source.get("current_hair"), dict) else {}
-    data_source = source.get("data_source") if isinstance(source.get("data_source"), dict) else {}
+    measured = (
+        source.get("measured_data_used")
+        if isinstance(source.get("measured_data_used"), dict)
+        else {}
+    )
+    current_hair = (
+        source.get("current_hair")
+        if isinstance(source.get("current_hair"), dict)
+        else {}
+    )
+    data_source = (
+        source.get("data_source") if isinstance(source.get("data_source"), dict) else {}
+    )
     rule_based = data_source.get("rule_based_interpretation") is True
 
     limitations_raw = _as_string_list(source.get("limitations"))
@@ -192,20 +211,44 @@ def build_visagism_interpretation(analysis: Dict[str, Any]) -> Dict[str, Any]:
         if translated not in limitations:
             limitations.append(translated)
 
-    raw_face_shape = _clean_text(measured.get("face_shape")) or _clean_text(source.get("face_shape_category"))
+    raw_face_shape = _clean_text(measured.get("face_shape")) or _clean_text(
+        source.get("face_shape_category")
+    )
     face_shape = _face_shape_label(raw_face_shape)
-    hair_density = _clean_text(measured.get("hair_density")) or _clean_text(current_hair.get("density"))
-    hairline = _clean_text(measured.get("hairline")) or _clean_text(current_hair.get("hairline"))
+    hair_density = _clean_text(measured.get("hair_density")) or _clean_text(
+        current_hair.get("density")
+    )
+    hairline = _clean_text(measured.get("hairline")) or _clean_text(
+        current_hair.get("hairline")
+    )
     current_summary = _clean_text(current_hair.get("summary"))
     primary_justification = _clean_text(source.get("primary_justification"))
 
     attention_points = list(limitations)
-    if not hair_density and "A densidade do cabelo não pôde ser medida com confiança suficiente." not in attention_points:
-        attention_points.append("A densidade do cabelo não pôde ser medida com confiança suficiente.")
-    if not hairline and "A linha frontal do cabelo não pôde ser confirmada com confiança suficiente." not in attention_points:
-        attention_points.append("A linha frontal do cabelo não pôde ser confirmada com confiança suficiente.")
-    if not face_shape and "O formato facial não pôde ser confirmado com dados medidos nesta sessão." not in attention_points:
-        attention_points.append("O formato facial não pôde ser confirmado com dados medidos nesta sessão.")
+    if (
+        not hair_density
+        and "A densidade do cabelo não pôde ser medida com confiança suficiente."
+        not in attention_points
+    ):
+        attention_points.append(
+            "A densidade do cabelo não pôde ser medida com confiança suficiente."
+        )
+    if (
+        not hairline
+        and "A linha frontal do cabelo não pôde ser confirmada com confiança suficiente."
+        not in attention_points
+    ):
+        attention_points.append(
+            "A linha frontal do cabelo não pôde ser confirmada com confiança suficiente."
+        )
+    if (
+        not face_shape
+        and "O formato facial não pôde ser confirmado com dados medidos nesta sessão."
+        not in attention_points
+    ):
+        attention_points.append(
+            "O formato facial não pôde ser confirmado com dados medidos nesta sessão."
+        )
 
     measured_labels: List[str] = []
     if face_shape:
@@ -219,7 +262,10 @@ def build_visagism_interpretation(analysis: Dict[str, Any]) -> Dict[str, Any]:
         if rule_based and primary in _RULE_BASED_HAIRCUT_RATIONALES:
             why = _RULE_BASED_HAIRCUT_RATIONALES[primary]
         else:
-            why = primary_justification or f"{primary} está entre as recomendações sustentadas pelos dados disponíveis desta sessão."
+            why = (
+                primary_justification
+                or f"{primary} está entre as recomendações sustentadas pelos dados disponíveis desta sessão."
+            )
         primary_recommendation: Optional[Dict[str, Any]] = {
             "name": primary,
             "why_it_works": why,
@@ -239,12 +285,14 @@ def build_visagism_interpretation(analysis: Dict[str, Any]) -> Dict[str, Any]:
             why_it_works = _RULE_BASED_HAIRCUT_RATIONALES[name]
         else:
             why_it_works = f"{name} aparece entre as recomendações sustentadas pelos dados desta sessão."
-        alternatives.append({
-            "name": name,
-            "why_it_works": why_it_works,
-            "best_use_case": "Alternativa estética ao corte principal, a ser comparada com preferência pessoal e manutenção desejada.",
-            "maintenance_level": "avaliar com o profissional",
-        })
+        alternatives.append(
+            {
+                "name": name,
+                "why_it_works": why_it_works,
+                "best_use_case": "Alternativa estética ao corte principal, a ser comparada com preferência pessoal e manutenção desejada.",
+                "maintenance_level": "avaliar com o profissional",
+            }
+        )
 
     executive_summary = (
         "A análise utilizou " + ", ".join(measured_labels) + "."
@@ -254,15 +302,30 @@ def build_visagism_interpretation(analysis: Dict[str, Any]) -> Dict[str, Any]:
     if primary:
         executive_summary += f" A recomendação principal é {primary}."
 
-    status = "ready" if primary else "insufficient_grounded_data"
+    if primary and rule_based:
+        status = "partial_grounded"
+    elif primary:
+        status = "ready"
+    elif (
+        data_source.get("llm_interpretation") is False
+        and data_source.get("measured") is True
+    ):
+        status = "service_limited"
+    else:
+        status = "insufficient_grounded_data"
     brief = _barber_guidance(primary, current_hair)
 
     return {
         "status": status,
         "executive_summary": executive_summary,
         "current_hair_assessment": {
-            "summary": current_summary or "Avaliação do cabelo atual limitada pelos dados disponíveis.",
-            "strengths": [item for item in measured_labels if item.startswith("densidade") or item.startswith("linha frontal")],
+            "summary": current_summary
+            or "Avaliação do cabelo atual limitada pelos dados disponíveis.",
+            "strengths": [
+                item
+                for item in measured_labels
+                if item.startswith("densidade") or item.startswith("linha frontal")
+            ],
             "attention_points": attention_points,
         },
         "primary_recommendation": primary_recommendation,
@@ -286,5 +349,7 @@ def build_visagism_interpretation(analysis: Dict[str, Any]) -> Dict[str, Any]:
             "lifestyle_advertising": "A recomendação pode ser adaptada para um acabamento mais natural, mantendo a identidade visual da pessoa.",
         },
         "limitations": limitations,
-        "confidence_note": _confidence_note(source.get("confidence"), bool(measured_labels)),
+        "confidence_note": _confidence_note(
+            source.get("confidence"), bool(measured_labels)
+        ),
     }

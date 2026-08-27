@@ -35,6 +35,7 @@ def test_unverified_generated_portrait_can_never_replace_person_photo():
     photos = [{"url": "real-front.jpg"}]
     fake_publication = {
         "image": "generated-similar-face.jpg",
+        "mode": "hair_overlay",
         "simulationApplied": True,
         "identityVerified": False,
         "layers": {"base": "real-front.jpg", "overlay": "generated-similar-face.jpg"},
@@ -48,21 +49,22 @@ def test_unverified_generated_portrait_can_never_replace_person_photo():
     assert media["fallbackUsed"] is True
 
 
-def test_even_validated_simulation_keeps_real_person_photo_on_card():
+def test_even_validated_hair_simulation_keeps_real_person_photo_on_card():
     guard = CardPhotoGuard()
     photos = [{"url": "real-front.jpg"}, {"url": "real-side.jpg"}]
     publication = {
-        "image": "hair-beard-overlay-result.jpg",
+        "image": "hair-overlay-result.jpg",
+        "mode": "hair_overlay",
         "simulationApplied": True,
         "identityVerified": True,
-        "layers": {"base": "real-front.jpg", "overlay": "hair-beard-overlay-result.jpg"},
+        "layers": {"base": "real-front.jpg", "overlay": "hair-overlay-result.jpg"},
     }
 
     media = guard.build_card_media(photos=photos, publication=publication)
 
     assert media["personPhoto"] == "real-front.jpg"
-    assert media["displayImage"] == "hair-beard-overlay-result.jpg"
-    assert media["displayMode"] == "validated_hair_beard_overlay"
+    assert media["displayImage"] == "hair-overlay-result.jpg"
+    assert media["displayMode"] == "validated_hair_overlay"
     assert media["simulationApplied"] is True
     assert media["identityVerified"] is True
 
@@ -72,6 +74,7 @@ def test_simulation_is_blocked_if_its_base_is_not_the_selected_real_photo():
     photos = [{"url": "real-front.jpg"}, {"url": "real-side.jpg"}]
     publication = {
         "image": "overlay.jpg",
+        "mode": "hair_overlay",
         "simulationApplied": True,
         "identityVerified": True,
         "layers": {"base": "real-side.jpg", "overlay": "overlay.jpg"},
@@ -87,6 +90,22 @@ def test_simulation_is_blocked_if_its_base_is_not_the_selected_real_photo():
     assert media["displayImage"] == "real-front.jpg"
     assert media["simulationApplied"] is False
     assert media["fallbackUsed"] is True
+
+
+def test_non_hair_overlay_mode_is_never_published():
+    guard = CardPhotoGuard()
+    photos = [{"url": "real-front.jpg"}]
+    publication = {
+        "image": "hair-and-beard.jpg",
+        "mode": "hair_beard_overlay",
+        "simulationApplied": True,
+        "identityVerified": True,
+        "layers": {"base": "real-front.jpg", "overlay": "hair-and-beard.jpg"},
+    }
+
+    media = guard.build_card_media(photos=photos, publication=publication)
+    assert media["displayImage"] == "real-front.jpg"
+    assert media["simulationApplied"] is False
 
 
 def test_arbitrary_generated_image_is_never_registered_as_real_reference():

@@ -1,12 +1,4 @@
-"""Local fail-closed orchestration for visagism simulation V1.
-
-This service intentionally works without any remote inpainting provider. In
-that mode it can exercise mask gates, local identity verification, policy and
-CardPhotoGuard, but it always returns ``blocked`` and the original image.
-
-A future provider can be injected as an OverlayRenderer without changing the
-existing identity policy or card guard.
-"""
+"""Fail-closed orchestration for identity-safe haircut simulation."""
 
 from __future__ import annotations
 
@@ -15,7 +7,12 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 from .card_photo_guard import DEFAULT_CARD_PHOTO_GUARD, CardPhotoGuard
 from .identity_lock import DEFAULT_IDENTITY_LOCK, IdentityLockPolicy
-from .masked_overlay_pipeline import IdentityVerifier, MaskAdapter, MaskedOverlayPipeline, OverlayRenderer
+from .masked_overlay_pipeline import (
+    IdentityVerifier,
+    MaskAdapter,
+    MaskedOverlayPipeline,
+    OverlayRenderer,
+)
 from .pixel_locked_renderer import PixelLockedRenderer
 
 
@@ -33,8 +30,11 @@ class VisagismSimulationService:
         original_photo: Any,
         real_reference_photos: List[Any],
     ) -> Dict[str, Any]:
-        """Run only local gates; never generate an image."""
-        if not self.policy.min_reference_validations <= len(real_reference_photos) <= self.policy.max_reference_validations:
+        if (
+            not self.policy.min_reference_validations
+            <= len(real_reference_photos)
+            <= self.policy.max_reference_validations
+        ):
             return {
                 "eligible": False,
                 "reason": "invalid_reference_count",
@@ -42,11 +42,11 @@ class VisagismSimulationService:
                 "reference_identity_scores": [],
             }
 
-        mask_result = self.mask_adapter.build_hair_beard_mask(original_photo)
+        mask_result = self.mask_adapter.build_hair_mask(original_photo)
         if not mask_result.get("valid"):
             return {
                 "eligible": False,
-                "reason": mask_result.get("reason") or "hair_beard_mask_failed",
+                "reason": mask_result.get("reason") or "hair_mask_failed",
                 "mask": mask_result,
                 "reference_identity_scores": [],
             }
@@ -57,11 +57,25 @@ class VisagismSimulationService:
                 "mask": mask_result,
                 "reference_identity_scores": [],
             }
+        if mask_result.get("beard_enabled") is True:
+            return {
+                "eligible": False,
+                "reason": "beard_region_not_allowed",
+                "mask": mask_result,
+                "reference_identity_scores": [],
+            }
+        if mask_result.get("background_locked") is not True:
+            return {
+                "eligible": False,
+                "reason": "background_lock_not_confirmed",
+                "mask": mask_result,
+                "reference_identity_scores": [],
+            }
 
-        # Before any third-party call, verify that the original is consistent
-        # with all real references. This is a local/calibration gate only; the
-        # generated candidate must still be verified again after rendering.
-        scores = [self.verifier.compare(original_photo, ref) for ref in real_reference_photos]
+        scores = [
+            1.0 if ref is original_photo else self.verifier.compare(original_photo, ref)
+            for ref in real_reference_photos
+        ]
         if any(score < self.policy.identity_threshold for score in scores):
             return {
                 "eligible": False,
@@ -87,29 +101,28 @@ class VisagismSimulationService:
         preferred_original: Optional[Any] = None,
         denoising: float = 0.30,
         identity_weight: float = 0.90,
+        preflight_result: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """Return a card-safe simulation contract.
-
-        With no renderer configured, this method is intentionally useful: it
-        proves all local gates and then fails closed with the original photo.
-        """
-        preflight = self.preflight(
-            original_photo=original_photo,
-            real_reference_photos=real_reference_photos,
-        )
-        if not preflight["eligible"]:
-            return self._blocked(
-                source_photos=source_photos,
-                preferred_original=preferred_original,
-                reason=preflight["reason"],
-                diagnostics={"preflight": preflight},
-            )
-
         if self.renderer is None:
             return self._blocked(
                 source_photos=source_photos,
                 preferred_original=preferred_original,
                 reason="inpaint_provider_not_configured",
+            )
+
+        preflight = (
+            dict(preflight_result)
+            if isinstance(preflight_result, dict)
+            else self.preflight(
+                original_photo=original_photo,
+                real_reference_photos=real_reference_photos,
+            )
+        )
+        if not preflight.get("eligible"):
+            return self._blocked(
+                source_photos=source_photos,
+                preferred_original=preferred_original,
+                reason=str(preflight.get("reason") or "simulation_blocked"),
                 diagnostics={"preflight": preflight},
             )
 
@@ -127,12 +140,18 @@ class VisagismSimulationService:
                 edit_instruction=edit_instruction,
                 denoising=denoising,
                 identity_weight=identity_weight,
+                validated_mask_result=(
+                    preflight.get("mask")
+                    if isinstance(preflight.get("mask"), dict)
+                    else None
+                ),
             )
         except Exception as exc:
+            reason = getattr(exc, "reason_code", "simulation_pipeline_error")
             return self._blocked(
                 source_photos=source_photos,
                 preferred_original=preferred_original,
-                reason="simulation_pipeline_error",
+                reason=reason,
                 diagnostics={
                     "preflight": preflight,
                     "error_type": type(exc).__name__,
@@ -147,9 +166,6 @@ class VisagismSimulationService:
                 diagnostics={"preflight": preflight, "pipeline": result},
             )
 
-        # Convert the successful pipeline result into the richer publication
-        # contract expected by CardPhotoGuard. PixelLockedRenderer guarantees
-        # all pixels outside the mask remain the original image.
         publication = self.policy.decide_publication(
             original_photo=original_photo,
             simulated_photo=result.get("image"),
@@ -177,10 +193,16 @@ class VisagismSimulationService:
             "reason": None,
             "card_media": card_media,
             "identity_scores": result.get("identityScores", []),
+            "mask": result.get("mask") or {},
             "diagnostics": {"preflight": preflight},
         }
 
-    def not_requested(self, *, source_photos: Iterable[Mapping[str, Any]], preferred_original: Optional[Any] = None) -> Dict[str, Any]:
+    def not_requested(
+        self,
+        *,
+        source_photos: Iterable[Mapping[str, Any]],
+        preferred_original: Optional[Any] = None,
+    ) -> Dict[str, Any]:
         card_media = self.card_guard.build_card_media(
             photos=source_photos,
             preferred_original=preferred_original,
@@ -199,7 +221,9 @@ class VisagismSimulationService:
         reason: str,
         diagnostics: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        original = self.card_guard.select_person_photo(source_photos, preferred_original)
+        original = self.card_guard.select_person_photo(
+            source_photos, preferred_original
+        )
         publication = {
             "image": original,
             "mode": "original_plus_spec",

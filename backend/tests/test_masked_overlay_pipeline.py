@@ -2,13 +2,49 @@ from app.ai.visagism.masked_overlay_pipeline import MaskedOverlayPipeline
 
 
 class MaskOK:
-    def build_hair_beard_mask(self, original_photo):
-        return {"valid": True, "mask": "hair-beard-mask", "protected_regions_touched": False}
+    def build_hair_mask(self, original_photo):
+        return {
+            "valid": True,
+            "mask": "hair-mask",
+            "protected_regions_touched": False,
+            "beard_enabled": False,
+            "background_locked": True,
+            "mask_kind": "hair-only-test",
+            "coverage_ratio": 0.2,
+        }
 
 
 class MaskBad:
-    def build_hair_beard_mask(self, original_photo):
-        return {"valid": True, "mask": "bad-mask", "protected_regions_touched": True}
+    def build_hair_mask(self, original_photo):
+        return {
+            "valid": True,
+            "mask": "bad-mask",
+            "protected_regions_touched": True,
+            "beard_enabled": False,
+            "background_locked": True,
+        }
+
+
+class MaskWithBeard:
+    def build_hair_mask(self, original_photo):
+        return {
+            "valid": True,
+            "mask": "unsafe-mask",
+            "protected_regions_touched": False,
+            "beard_enabled": True,
+            "background_locked": True,
+        }
+
+
+class MaskWithoutBackgroundLock:
+    def build_hair_mask(self, original_photo):
+        return {
+            "valid": True,
+            "mask": "unsafe-mask",
+            "protected_regions_touched": False,
+            "beard_enabled": False,
+            "background_locked": False,
+        }
 
 
 class Renderer:
@@ -33,12 +69,13 @@ def test_renderer_receives_original_as_init_and_reference():
     result = MaskedOverlayPipeline(MaskOK(), renderer, Verifier([0.91, 0.92, 0.93])).run(
         original_photo="original.jpg",
         real_reference_photos=["r1", "r2", "r3"],
-        edit_instruction="change only hair and beard",
+        edit_instruction="change only hair",
     )
-    assert result["mode"] == "hair_beard_overlay"
+    assert result["mode"] == "hair_overlay"
+    assert result["editableRegions"] == ["hair"]
     assert renderer.last["init_image"] == "original.jpg"
     assert renderer.last["reference_image"] == "original.jpg"
-    assert renderer.last["mask"] == "hair-beard-mask"
+    assert renderer.last["mask"] == "hair-mask"
 
 
 def test_low_identity_score_returns_original_photo():
@@ -66,6 +103,28 @@ def test_mask_touching_protected_region_is_blocked_before_render():
     )
     assert result["image"] == "original.jpg"
     assert result["reason"] == "protected_region_in_mask"
+    assert renderer.last is None
+
+
+def test_haircut_pipeline_refuses_beard_region():
+    renderer = Renderer()
+    result = MaskedOverlayPipeline(MaskWithBeard(), renderer, Verifier([])).run(
+        original_photo="original.jpg",
+        real_reference_photos=["r1", "r2", "r3"],
+        edit_instruction="hair only",
+    )
+    assert result["reason"] == "beard_region_not_allowed"
+    assert renderer.last is None
+
+
+def test_haircut_pipeline_requires_background_lock():
+    renderer = Renderer()
+    result = MaskedOverlayPipeline(MaskWithoutBackgroundLock(), renderer, Verifier([])).run(
+        original_photo="original.jpg",
+        real_reference_photos=["r1", "r2", "r3"],
+        edit_instruction="hair only",
+    )
+    assert result["reason"] == "background_lock_not_confirmed"
     assert renderer.last is None
 
 

@@ -12,8 +12,9 @@ import json
 from typing import Any, Dict, List, Optional
 
 import openai
-from app.config import settings
 
+from app.ai.visagism.fallback_ranker import rank_fallback_hairstyles
+from app.config import settings
 
 _FALLBACK_HAIRSTYLES = {
     "round": [
@@ -128,7 +129,7 @@ class VisagismAnalyzer:
     def __init__(self):
         self.client = openai.AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
-    async def analyze(self, photos: List[Dict], context: Dict = None) -> Dict:
+    async def analyze(self, photos: List[Dict], context: Optional[Dict] = None) -> Dict:
         """Entry point. Aceita context com parallel_results dos motores reais."""
         photo = photos[0] if photos else None
         if not photo:
@@ -136,7 +137,7 @@ class VisagismAnalyzer:
 
         return await self.analyze_single(photo, context=context or {})
 
-    async def analyze_single(self, photo: Dict, context: Dict = None) -> Dict:
+    async def analyze_single(self, photo: Dict, context: Optional[Dict] = None) -> Dict:
         context = context or {}
         parallel = context.get("parallel_results") or {}
         triage = context.get("triage_results") or []
@@ -490,39 +491,65 @@ FORMATO JSON OBRIGATÓRIO:
         return result
 
     def _fallback_response(
-        self, error_msg: str, measured: Dict = None, limitations: List = None
+        self,
+        error_msg: str,
+        measured: Optional[Dict] = None,
+        limitations: Optional[List] = None,
     ) -> Dict:
         measured = measured or {}
         limitations = list(limitations or [])
         face_shape = measured.get("face_shape")
-        hairstyles = self._rule_based_hairstyles(face_shape)
-        primary = hairstyles[0] if hairstyles else None
         density = measured.get("hair_density")
         hairline = measured.get("hairline")
+        hair_current = measured.get("hair_current")
 
-        if hairstyles:
-            limitations.append("llm_unavailable_rule_based_recommendations")
+        base_styles = self._rule_based_hairstyles(face_shape)
+        ranked = rank_fallback_hairstyles(base_styles, hair_current)
+        hairstyles = ranked["styles"] if face_shape and base_styles else []
+        primary = hairstyles[0] if hairstyles else None
+        measurement_summary = ranked["measurement_summary"]
+        metric_count = int(ranked["metric_count"])
+        personalized = bool(ranked["personalized"] and hairstyles)
+
+        if personalized:
+            limitations.append(
+                "llm_unavailable_personalized_rule_based_recommendations"
+            )
         else:
             limitations.append("llm_unavailable")
-            limitations.append("fallback_no_grounded_face_shape")
+            if face_shape and base_styles:
+                limitations.append("fallback_insufficient_personalization")
+            else:
+                limitations.append("fallback_no_grounded_face_shape")
 
         hair_summary_parts = []
         if density:
             hair_summary_parts.append(f"densidade {density}")
         if hairline:
             hair_summary_parts.append("linha frontal detectada")
+        if measurement_summary:
+            hair_summary_parts.append(measurement_summary)
         current_hair_summary = (
-            "Cabelo atual com " + " e ".join(hair_summary_parts) + "."
+            "Cabelo atual com " + "; ".join(hair_summary_parts) + "."
             if hair_summary_parts
             else "Avaliação capilar parcial; algumas medidas não foram confirmadas."
         )
 
         primary_justification = None
         if primary and face_shape:
-            primary_justification = (
-                f"Fallback determinístico baseado no formato facial {face_shape} medido nesta sessão. "
-                "A escolha final deve considerar densidade, linha frontal e preferência pessoal quando esses dados estiverem disponíveis."
+            details = (
+                f" Foram usadas {metric_count} medições capilares confirmadas: "
+                f"{measurement_summary}."
+                if measurement_summary
+                else ""
             )
+            primary_justification = (
+                f"Recomendação de contingência personalizada para o formato facial "
+                f"{face_shape} medido nesta sessão.{details} A lista foi ranqueada "
+                "somente com dados desta análise, sem reutilizar resultado de outro perfil."
+            )
+
+        confidence = min(0.62, 0.48 + (metric_count * 0.03)) if primary else 0.30
 
         return {
             "face_shape_category": face_shape or "desconhecido",
@@ -543,6 +570,7 @@ FORMATO JSON OBRIGATÓRIO:
                 "face_shape": face_shape,
                 "hair_density": density,
                 "hairline": hairline,
+                "hair_current": hair_current,
                 "skin_undertone": measured.get("skin_undertone"),
                 "skin_depth": measured.get("skin_depth"),
                 "season": measured.get("season"),
@@ -551,8 +579,8 @@ FORMATO JSON OBRIGATÓRIO:
                 "triage_categories": measured.get("triage_categories"),
             },
             "limitations": list(dict.fromkeys(limitations)),
-            "recommended_eyebrow_shapes": ["Arco suave"],
-            "recommended_makeup_styles": ["Natural"],
+            "recommended_eyebrow_shapes": [],
+            "recommended_makeup_styles": [],
             "contouring_tips": [],
             "highlighting_tips": [],
             "color_recommendations": {
@@ -565,15 +593,19 @@ FORMATO JSON OBRIGATÓRIO:
                 ),
             },
             "overall_recommendation": (
-                "Recomendação de contingência baseada apenas nas medições locais confirmadas."
+                "Análise parcial personalizada pelas medições locais confirmadas; "
+                "a interpretação avançada estava indisponível."
                 if primary
-                else "Não há base medida suficiente para recomendar um corte com segurança."
+                else "As medições confirmadas não foram suficientes para diferenciar "
+                "cinco recomendações sem recorrer a uma lista genérica."
             ),
-            "confidence": 0.55 if primary else 0.3,
+            "confidence": confidence,
             "error": error_msg,
             "data_source": {
-                "measured": bool(face_shape or density or hairline),
+                "measured": bool(face_shape or density or hairline or hair_current),
                 "llm_interpretation": False,
                 "rule_based_interpretation": bool(primary),
+                "personalized_fallback": personalized,
+                "fallback_metric_count": metric_count,
             },
         }

@@ -14,6 +14,7 @@ const MAX_GET_RETRIES = 12;
 const RETRY_DELAYS = [2000, 3000, 5000, 8000, 13000];
 const AUTH_TIMEOUT_MS = 60000;
 const UPLOAD_TIMEOUT_MS = 120000;
+const SIMULATION_TIMEOUT_MS = 180000;
 
 type RetryConfig = {
   __retryCount?: number;
@@ -137,6 +138,8 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
+    // Only GET requests are retried. Generation POSTs are intentionally never
+    // replayed automatically because a retry could duplicate provider cost.
     const isTransientGetFailure =
       method === "get" && (!error.response || isTransientStatus(status));
 
@@ -283,6 +286,18 @@ export const analysisApi = {
       `/api/v1/analyses/${id}/visagism`,
       operationConfig(`carregar resultado ${id.slice(0, 8)}`)
     ),
+  getVisagismBarberBrief: (id: string, haircutName: string) =>
+    api.get(
+      `/api/v1/analyses/${id}/visagism/barber-brief`,
+      operationConfig(`carregar card do barbeiro ${haircutName}`, {
+        params: { haircut_name: haircutName },
+      })
+    ),
+  listVisagismSimulations: (id: string) =>
+    api.get(
+      `/api/v1/analyses/${id}/visagism/simulations`,
+      operationConfig(`carregar simulações ${id.slice(0, 8)}`)
+    ),
   start: (photoshootId: string, data: any) =>
     api.post(
       `/api/v1/ai/analyze?photoshoot_id=${photoshootId}`,
@@ -293,7 +308,9 @@ export const analysisApi = {
     api.post(
       `/api/v1/analyses/${id}/visagism/simulate`,
       { haircut_name: haircutName },
-      operationConfig("simular visagismo")
+      operationConfig(`simular corte ${haircutName}`, {
+        timeout: SIMULATION_TIMEOUT_MS,
+      })
     ),
 };
 

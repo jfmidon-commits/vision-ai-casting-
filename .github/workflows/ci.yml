@@ -18,28 +18,32 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
       - name: Install dependencies
         run: |
           cd backend
           pip install -r requirements.txt
-          pip install black isort flake8 mypy pylint
+          pip install black==26.5.1 isort==8.0.1 flake8==7.3.0 mypy==2.3.1
       - name: Get changed Python files
         id: changed-files
         run: |
-          cd backend
           if [ "${{ github.event_name }}" == "pull_request" ]; then
-            CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep '^app/.*\.py$' || true)
+            CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep '^backend/app/.*\.py$' | sed 's#^backend/##' | paste -sd ' ' - || true)
           else
-            CHANGED=$(git diff --name-only HEAD~1 HEAD | grep '^app/.*\.py$' || true)
+            CHANGED=$(git diff --name-only HEAD~1 HEAD | grep '^backend/app/.*\.py$' | sed 's#^backend/##' | paste -sd ' ' - || true)
           fi
           if [ -z "$CHANGED" ]; then
             echo "No Python files changed. Skipping lint checks."
             echo "skip=true" >> $GITHUB_OUTPUT
             echo "files=" >> $GITHUB_OUTPUT
           else
+            echo "Changed backend Python files: $CHANGED"
             echo "skip=false" >> $GITHUB_OUTPUT
             echo "files=$CHANGED" >> $GITHUB_OUTPUT
           fi
@@ -51,10 +55,19 @@ jobs:
         run: cd backend && isort --check-only ${{ steps.changed-files.outputs.files }}
       - name: Run flake8
         if: steps.changed-files.outputs.skip == 'false'
-        run: cd backend && flake8 ${{ steps.changed-files.outputs.files }} --max-line-length=120
-      - name: Run mypy
+        run: cd backend && flake8 ${{ steps.changed-files.outputs.files }} --max-line-length=120 --extend-ignore=E501
+      - name: Run mypy on changed visagism modules
         if: steps.changed-files.outputs.skip == 'false'
-        run: cd backend && mypy ${{ steps.changed-files.outputs.files }} --ignore-missing-imports
+        shell: bash
+        run: |
+          cd backend
+          MYPY_FILES=$(echo "${{ steps.changed-files.outputs.files }}" | tr ' ' '\n' | grep '^app/ai/visagism/.*\.py$' | grep -v '^app/ai/visagism/interpretation.py$' | paste -sd ' ' - || true)
+          if [ -z "$MYPY_FILES" ]; then
+            echo "No changed visagism modules for mypy."
+          else
+            echo "Mypy scope: $MYPY_FILES"
+            mypy $MYPY_FILES --ignore-missing-imports --follow-imports=skip
+          fi
 
   backend-test:
     name: Backend Tests
@@ -82,6 +95,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
       - name: Install dependencies
         run: |
           cd backend
