@@ -62,6 +62,5 @@ def build_haircut_edit_instruction(haircut_name: str, visagism: Dict[str, Any]) 
         f"Create a photorealistic haircut preview for: {haircut_name}. "
         "Respect the visible natural hairline and the source photo. Do not "
         "beautify, de-age, age, reshape, recolor skin, or modify the beard. "
-        "The result is a haircut preview, not a new portrait."
-        + details
+        "The result is a haircut preview, not a new portrait." + details
     )
