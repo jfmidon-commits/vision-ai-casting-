@@ -127,9 +127,7 @@ class FalOverlayRenderer:
         original = _to_rgb_image(init_image)
         original_size = original.size
         mask_image = _to_mask_image(mask, original_size)
-        work_size = _working_size(
-            original_size[0], original_size[1], self.max_pixels
-        )
+        work_size = _working_size(original_size[0], original_size[1], self.max_pixels)
 
         if work_size != original_size:
             work_image = original.resize(work_size, Image.Resampling.LANCZOS)
