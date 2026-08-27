@@ -26,7 +26,7 @@ def test_interpretation_keeps_grounded_haircut_names_only():
     assert result["primary_recommendation"]["name"] == "Textured crop"
     assert [item["name"] for item in result["alternative_hairstyles"]] == ["Side part"]
     assert "cm" not in result["barber_brief"]["top"]
-    assert result["barber_brief"]["top"] == "comprimento não medido nesta sessão"
+    assert "cabelo real" in result["barber_brief"]["top"]
 
 
 def test_interpretation_never_fills_missing_measurements():
@@ -54,7 +54,7 @@ def test_interpretation_never_fills_missing_measurements():
     assert "densidade" in points.lower()
     assert "linha frontal" in points.lower()
     assert "formato facial" in points.lower()
-    assert result["barber_brief"]["texture"] == "não determinada"
+    assert "avaliar" in result["barber_brief"]["texture"].lower()
 
 
 def test_interpretation_insufficient_data_has_no_primary():
@@ -93,3 +93,62 @@ def test_limitations_are_human_readable_not_raw_codes():
     assert "facial_result_is_mock" not in combined
     assert "fewer_than_5_grounded_hairstyles" not in combined
     assert len(result["limitations"]) == 2
+
+
+def test_rule_based_result_translates_round_and_hides_technical_fallback_copy():
+    raw = {
+        "recommended_hairstyles": [
+            "Quiff texturizado",
+            "Side Part com volume no topo",
+            "Pompadour moderado",
+            "Undercut com topo alongado",
+            "Crew Cut com laterais mais baixas",
+        ],
+        "primary_hairstyle": "Quiff texturizado",
+        "primary_justification": "Fallback determinístico baseado no formato facial round medido nesta sessão.",
+        "measured_data_used": {
+            "face_shape": "round",
+            "hair_density": "média",
+            "hairline": None,
+        },
+        "current_hair": {
+            "summary": "Cabelo atual com densidade média.",
+            "density": "média",
+            "hairline": "não medido",
+        },
+        "confidence": 0.55,
+        "limitations": ["hairline_not_measured", "llm_unavailable_rule_based_recommendations"],
+        "data_source": {
+            "measured": True,
+            "llm_interpretation": False,
+            "rule_based_interpretation": True,
+        },
+    }
+
+    result = build_visagism_interpretation(raw)
+
+    assert result["status"] == "ready"
+    assert "formato facial: redondo" in result["executive_summary"]
+    assert "round" not in result["executive_summary"]
+    assert "Fallback" not in result["primary_recommendation"]["why_it_works"]
+    assert "alongar visualmente" in result["primary_recommendation"]["why_it_works"]
+    assert result["alternative_hairstyles"][0]["name"] == "Side Part com volume no topo"
+    assert "assimetria visual" in result["alternative_hairstyles"][0]["why_it_works"]
+
+
+def test_rule_based_barber_brief_is_actionable_without_inventing_measurements():
+    result = build_visagism_interpretation({
+        "recommended_hairstyles": ["Quiff texturizado"],
+        "primary_hairstyle": "Quiff texturizado",
+        "measured_data_used": {"face_shape": "round", "hair_density": "média"},
+        "current_hair": {"density": "média"},
+        "confidence": 0.55,
+        "data_source": {"rule_based_interpretation": True},
+    })
+
+    brief = result["barber_brief"]
+    assert "volume" in brief["top"].lower()
+    assert "controladas" in brief["sides"].lower()
+    assert "cm" not in brief["top"]
+    assert "mm" not in brief["top"]
+    assert "cm/mm" in brief["note"]
