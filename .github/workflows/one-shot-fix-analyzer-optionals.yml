@@ -1,0 +1,52 @@
+name: One-shot fix analyzer optionals
+
+on:
+  push:
+    branches:
+      - feature/visagism-real-hair-simulation-p1
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: "github.event.head_commit.message == 'chore: fix analyzer optional annotations'"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/visagism-real-hair-simulation-p1
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Fix Optional annotations and format
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('backend/app/ai/visagism/analyzer.py')
+          text = path.read_text()
+          replacements = {
+              'async def analyze(self, photos: List[Dict], context: Dict = None) -> Dict:':
+                  'async def analyze(self, photos: List[Dict], context: Optional[Dict] = None) -> Dict:',
+              'async def analyze_single(self, photo: Dict, context: Dict = None) -> Dict:':
+                  'async def analyze_single(self, photo: Dict, context: Optional[Dict] = None) -> Dict:',
+              'self, error_msg: str, measured: Dict = None, limitations: List = None':
+                  'self, error_msg: str, measured: Optional[Dict] = None, limitations: Optional[List] = None',
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f'expected text not found: {old}')
+              text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
+          pip install black==26.5.1 isort==8.0.1
+          cd backend
+          black app/ai/visagism/analyzer.py
+          isort app/ai/visagism/analyzer.py
+          cd ..
+          git config user.name "Juliano Midon"
+          git config user.email "jfmidon@gmail.com"
+          git add backend/app/ai/visagism/analyzer.py
+          git commit -m "fix: make analyzer nullable inputs explicit"
+          git push origin HEAD:feature/visagism-real-hair-simulation-p1
