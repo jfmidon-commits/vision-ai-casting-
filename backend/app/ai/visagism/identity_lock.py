@@ -4,6 +4,7 @@ Golden rule: NEVER regenerate the person. The original photo is immutable.
 Only a validated hair overlay may change. Face, beard, body, clothing and
 background remain untouched. Any missing validation publishes the original.
 """
+
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional
 
@@ -71,7 +72,11 @@ class IdentityLockPolicy:
             return {"valid": False, "scores": [], "reason": "identity_scores_missing"}
 
         scores: List[float] = list(identity_scores)
-        count_valid = self.min_reference_validations <= len(scores) <= self.max_reference_validations
+        count_valid = (
+            self.min_reference_validations
+            <= len(scores)
+            <= self.max_reference_validations
+        )
         threshold_valid = bool(scores) and all(
             score >= self.identity_threshold for score in scores
         )
@@ -80,7 +85,9 @@ class IdentityLockPolicy:
             "scores": scores,
             "count_valid": count_valid,
             "threshold_valid": threshold_valid,
-            "reason": None if count_valid and threshold_valid else "identity_lock_failed",
+            "reason": (
+                None if count_valid and threshold_valid else "identity_lock_failed"
+            ),
         }
 
     def decide_publication(

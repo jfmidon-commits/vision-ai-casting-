@@ -3,6 +3,7 @@
 A card always carries at least one REAL source photo. A validated haircut
 simulation may be displayed, but can never replace provenance of that source.
 """
+
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 

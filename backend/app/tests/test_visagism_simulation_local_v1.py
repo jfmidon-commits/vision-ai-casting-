@@ -2,11 +2,10 @@ import sys
 from unittest.mock import patch
 
 import numpy as np
-from PIL import Image
-
 from app.ai.visagism.adapters.deepface_identity import DeepFaceArcFaceVerifier
 from app.ai.visagism.adapters.mediapipe_hair_mask import MediaPipeHairBeardMaskAdapter
 from app.ai.visagism.simulation_service import VisagismSimulationService
+from PIL import Image
 
 
 def _synthetic_landmarks():
@@ -102,7 +101,9 @@ def test_mask_adapter_blocks_coverage_out_of_range():
 
 
 def test_mask_adapter_blocks_protected_region_overlap():
-    adapter = _adapter(detector=lambda _img: _synthetic_landmarks_with_protected_overlap())
+    adapter = _adapter(
+        detector=lambda _img: _synthetic_landmarks_with_protected_overlap()
+    )
     result = adapter.build_hair_beard_mask(_image())
 
     assert result["valid"] is False
@@ -131,7 +132,10 @@ def test_arcface_adapter_uses_native_threshold_and_is_fail_closed():
     details = verifier.compare_with_details(_image(), _image())
     assert details["native_verified"] is True
     assert details["normalized_identity_score"] > 0.80
-    assert details["score_semantics"] == "normalized_decision_score_not_biometric_similarity"
+    assert (
+        details["score_semantics"]
+        == "normalized_decision_score_not_biometric_similarity"
+    )
 
     failing = DeepFaceArcFaceVerifier(
         verify_func=lambda *_args: (_ for _ in ()).throw(RuntimeError("boom"))
@@ -152,7 +156,9 @@ def test_arcface_missing_deepface_dependency_fails_closed():
 def test_service_without_provider_is_blocked_and_card_shows_original():
     original = _image(70)
     refs = [_image(71), _image(72), _image(73)]
-    service = VisagismSimulationService(mask_adapter=_adapter(), verifier=AlwaysPassVerifier())
+    service = VisagismSimulationService(
+        mask_adapter=_adapter(), verifier=AlwaysPassVerifier()
+    )
 
     result = service.simulate(
         original_photo=original,

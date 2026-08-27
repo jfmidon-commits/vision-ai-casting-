@@ -4,6 +4,7 @@ The mask combines a conservative Face Mesh hair ROI with person segmentation.
 Only pixels that belong to the person AND sit above the protected face oval are
 editable. Beard, face and background remain outside the haircut mask.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -11,7 +12,6 @@ from typing import Any, Callable, Dict, Iterable, Optional, Sequence, Tuple
 
 import numpy as np
 from PIL import Image
-
 
 Landmark = Tuple[float, float]
 LandmarkDetector = Callable[[np.ndarray], Optional[Sequence[Landmark]]]
@@ -37,9 +37,42 @@ class MediaPipeHairBeardMaskAdapter:
     person_segmenter: Optional[PersonSegmenter] = None
 
     FACE_OVAL: Tuple[int, ...] = (
-        10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288,
-        397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136,
-        172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109,
+        10,
+        338,
+        297,
+        332,
+        284,
+        251,
+        389,
+        356,
+        454,
+        323,
+        361,
+        288,
+        397,
+        365,
+        379,
+        378,
+        400,
+        377,
+        152,
+        148,
+        176,
+        149,
+        150,
+        136,
+        172,
+        58,
+        132,
+        93,
+        234,
+        127,
+        162,
+        21,
+        54,
+        103,
+        67,
+        109,
     )
     LEFT_EYE: Tuple[int, ...] = (33, 246, 161, 160, 159, 158, 157, 173, 133)
     RIGHT_EYE: Tuple[int, ...] = (362, 398, 384, 385, 386, 387, 388, 466, 263)
@@ -176,7 +209,9 @@ class MediaPipeHairBeardMaskAdapter:
         except ImportError:
             return None
 
-        segmenter = mp.solutions.selfie_segmentation.SelfieSegmentation(model_selection=0)
+        segmenter = mp.solutions.selfie_segmentation.SelfieSegmentation(
+            model_selection=0
+        )
         try:
             result = segmenter.process(rgb)
         finally:

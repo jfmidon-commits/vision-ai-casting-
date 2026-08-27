@@ -4,6 +4,7 @@ This adapter avoids shipping a heavyweight local face-recognition runtime on
 the free Render worker. AWS returns face similarity in [0, 100]; the adapter
 normalizes that value to [0, 1] for IdentityLockPolicy.
 """
+
 from __future__ import annotations
 
 import io
@@ -11,9 +12,8 @@ from typing import Any, Optional
 
 import boto3
 import numpy as np
-from PIL import Image
-
 from app.config import settings
+from PIL import Image
 
 
 class AWSRekognitionIdentityVerifier:

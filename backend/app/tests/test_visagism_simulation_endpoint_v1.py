@@ -2,7 +2,6 @@ from uuid import uuid4
 
 from app.routers.analyses import _public_simulation_contract
 
-
 ORIGINAL = "https://example.test/original.jpg"
 GENERATED = "https://example.test/generated.jpg"
 

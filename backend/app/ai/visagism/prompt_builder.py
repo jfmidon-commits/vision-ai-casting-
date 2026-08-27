@@ -1,4 +1,5 @@
 """Grounded prompt builder for haircut-only image editing."""
+
 from __future__ import annotations
 
 from typing import Any, Dict, List
@@ -15,12 +16,24 @@ def _clean(value: Any) -> str | None:
 
 def build_haircut_edit_instruction(haircut_name: str, visagism: Dict[str, Any]) -> str:
     source = visagism if isinstance(visagism, dict) else {}
-    measured = source.get("measured_data_used") if isinstance(source.get("measured_data_used"), dict) else {}
-    current_hair = source.get("current_hair") if isinstance(source.get("current_hair"), dict) else {}
+    measured = (
+        source.get("measured_data_used")
+        if isinstance(source.get("measured_data_used"), dict)
+        else {}
+    )
+    current_hair = (
+        source.get("current_hair")
+        if isinstance(source.get("current_hair"), dict)
+        else {}
+    )
 
     grounded_details: List[str] = []
-    density = _clean(measured.get("hair_density")) or _clean(current_hair.get("density"))
-    texture = _clean(measured.get("hair_texture")) or _clean(current_hair.get("texture"))
+    density = _clean(measured.get("hair_density")) or _clean(
+        current_hair.get("density")
+    )
+    texture = _clean(measured.get("hair_texture")) or _clean(
+        current_hair.get("texture")
+    )
     hair_color = _clean(measured.get("hair_color")) or _clean(current_hair.get("color"))
 
     if density:
@@ -31,7 +44,9 @@ def build_haircut_edit_instruction(haircut_name: str, visagism: Dict[str, Any]) 
         grounded_details.append(f"confirmed current hair color: {hair_color}")
 
     details = (
-        " Use only these confirmed hair observations: " + "; ".join(grounded_details) + "."
+        " Use only these confirmed hair observations: "
+        + "; ".join(grounded_details)
+        + "."
         if grounded_details
         else " Do not invent hair density, texture, color, hairline, or length that cannot be inferred from the source image."
     )

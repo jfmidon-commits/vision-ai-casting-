@@ -5,12 +5,6 @@ from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
-from PIL import Image
-from pydantic import BaseModel, Field
-from sqlalchemy import and_, select, text
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.ai.visagism.adapters.mediapipe_hair_mask import MediaPipeHairBeardMaskAdapter
 from app.ai.visagism.barber_brief import build_barber_brief_for_haircut
 from app.ai.visagism.interpretation import build_visagism_interpretation
@@ -27,9 +21,14 @@ from app.ai.visagism.simulation_service import VisagismSimulationService
 from app.database import get_db
 from app.middleware.auth import get_current_user
 from app.models import Analysis, Photo
-from app.schemas import APIResponse, AnalysisResponse
+from app.schemas import AnalysisResponse, APIResponse
 from app.services.storage_service import StorageService
 from app.utils.logger import get_logger
+from fastapi import APIRouter, Depends, HTTPException
+from PIL import Image
+from pydantic import BaseModel, Field
+from sqlalchemy import and_, select, text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/api/v1/analyses", tags=["analyses"])
 logger = get_logger(__name__)
@@ -84,7 +83,11 @@ def _public_simulation_contract(
     barber_brief: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     ready = simulation_status == "ready" and bool(display_url)
-    public_status = "ready" if ready else ("blocked" if simulation_status == "ready" else simulation_status)
+    public_status = (
+        "ready"
+        if ready
+        else ("blocked" if simulation_status == "ready" else simulation_status)
+    )
     return {
         "analysis_id": str(analysis_id),
         "selected_haircut": haircut_name,
@@ -149,7 +152,9 @@ async def get_analysis(
 ):
     result = await db.execute(
         select(Analysis).where(
-            and_(Analysis.id == analysis_id, Analysis.tenant_id == current_user.tenant_id)
+            and_(
+                Analysis.id == analysis_id, Analysis.tenant_id == current_user.tenant_id
+            )
         )
     )
     analysis = result.scalar_one_or_none()
@@ -166,7 +171,9 @@ async def get_facial_analysis(
 ):
     result = await db.execute(
         select(Analysis).where(
-            and_(Analysis.id == analysis_id, Analysis.tenant_id == current_user.tenant_id)
+            and_(
+                Analysis.id == analysis_id, Analysis.tenant_id == current_user.tenant_id
+            )
         )
     )
     analysis = result.scalar_one_or_none()
@@ -183,7 +190,9 @@ async def get_visagism_analysis(
 ):
     result = await db.execute(
         select(Analysis).where(
-            and_(Analysis.id == analysis_id, Analysis.tenant_id == current_user.tenant_id)
+            and_(
+                Analysis.id == analysis_id, Analysis.tenant_id == current_user.tenant_id
+            )
         )
     )
     analysis = result.scalar_one_or_none()
@@ -201,7 +210,9 @@ async def get_visagism_barber_brief(
 ):
     result = await db.execute(
         select(Analysis).where(
-            and_(Analysis.id == analysis_id, Analysis.tenant_id == current_user.tenant_id)
+            and_(
+                Analysis.id == analysis_id, Analysis.tenant_id == current_user.tenant_id
+            )
         )
     )
     analysis = result.scalar_one_or_none()
@@ -230,7 +241,9 @@ async def list_visagism_simulations(
 ):
     result = await db.execute(
         select(Analysis).where(
-            and_(Analysis.id == analysis_id, Analysis.tenant_id == current_user.tenant_id)
+            and_(
+                Analysis.id == analysis_id, Analysis.tenant_id == current_user.tenant_id
+            )
         )
     )
     analysis = result.scalar_one_or_none()
@@ -239,7 +252,9 @@ async def list_visagism_simulations(
 
     photo_result = await db.execute(
         select(Photo).where(
-            and_(Photo.id == analysis.photo_id, Photo.tenant_id == current_user.tenant_id)
+            and_(
+                Photo.id == analysis.photo_id, Photo.tenant_id == current_user.tenant_id
+            )
         )
     )
     original = photo_result.scalar_one_or_none()
@@ -257,7 +272,9 @@ async def list_visagism_simulations(
             continue
         seen.add(haircut_name)
         try:
-            display_url = StorageService.get_presigned_url(str(stored_key), expires_in=3600)
+            display_url = StorageService.get_presigned_url(
+                str(stored_key), expires_in=3600
+            )
         except Exception:
             continue
         public_items.append(
@@ -284,7 +301,9 @@ async def simulate_visagism_haircut(
 ):
     result = await db.execute(
         select(Analysis).where(
-            and_(Analysis.id == analysis_id, Analysis.tenant_id == current_user.tenant_id)
+            and_(
+                Analysis.id == analysis_id, Analysis.tenant_id == current_user.tenant_id
+            )
         )
     )
     analysis = result.scalar_one_or_none()
@@ -314,7 +333,9 @@ async def simulate_visagism_haircut(
     if not photos:
         raise HTTPException(status_code=409, detail="Analysis has no source photos")
 
-    original = next((photo for photo in photos if photo.id == analysis.photo_id), photos[0])
+    original = next(
+        (photo for photo in photos if photo.id == analysis.photo_id), photos[0]
+    )
     source_photo_id = str(original.id)
     original_url = _presigned_source_url(original.url)
 
@@ -374,12 +395,21 @@ async def simulate_visagism_haircut(
 
     # The normal mobile flow has three real photos total. The original source
     # is also a legitimate identity reference, giving the required 3 refs.
-    selected_photos = [original] + [photo for photo in photos if photo.id != original.id][:4]
+    selected_photos = [original] + [
+        photo for photo in photos if photo.id != original.id
+    ][:4]
     downloaded = await asyncio.gather(
-        *[asyncio.to_thread(_read_pil_storage_image, photo.url) for photo in selected_photos],
+        *[
+            asyncio.to_thread(_read_pil_storage_image, photo.url)
+            for photo in selected_photos
+        ],
         return_exceptions=True,
     )
-    original_image = downloaded[0] if downloaded and not isinstance(downloaded[0], Exception) else None
+    original_image = (
+        downloaded[0]
+        if downloaded and not isinstance(downloaded[0], Exception)
+        else None
+    )
     if original_image is None:
         return APIResponse(
             data=_public_simulation_contract(
@@ -567,7 +597,9 @@ async def get_casting_analysis(
 ):
     result = await db.execute(
         select(Analysis).where(
-            and_(Analysis.id == analysis_id, Analysis.tenant_id == current_user.tenant_id)
+            and_(
+                Analysis.id == analysis_id, Analysis.tenant_id == current_user.tenant_id
+            )
         )
     )
     analysis = result.scalar_one_or_none()

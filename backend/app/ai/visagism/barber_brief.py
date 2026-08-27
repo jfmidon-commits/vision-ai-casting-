@@ -1,4 +1,5 @@
 """Grounded barber brief for any persisted recommended haircut."""
+
 from __future__ import annotations
 
 from typing import Any, Dict, Optional
@@ -18,16 +19,29 @@ def build_barber_brief_for_haircut(
     if haircut_name not in hairstyles:
         return None
 
-    measured = source.get("measured_data_used") if isinstance(source.get("measured_data_used"), dict) else {}
-    current_hair = source.get("current_hair") if isinstance(source.get("current_hair"), dict) else {}
+    measured = (
+        source.get("measured_data_used")
+        if isinstance(source.get("measured_data_used"), dict)
+        else {}
+    )
+    current_hair = (
+        source.get("current_hair")
+        if isinstance(source.get("current_hair"), dict)
+        else {}
+    )
     guidance = _barber_guidance(haircut_name, current_hair)
 
     grounded_in = []
     face_shape = _face_shape_label(
-        _clean_text(measured.get("face_shape")) or _clean_text(source.get("face_shape_category"))
+        _clean_text(measured.get("face_shape"))
+        or _clean_text(source.get("face_shape_category"))
     )
-    density = _clean_text(measured.get("hair_density")) or _clean_text(current_hair.get("density"))
-    hairline = _clean_text(measured.get("hairline")) or _clean_text(current_hair.get("hairline"))
+    density = _clean_text(measured.get("hair_density")) or _clean_text(
+        current_hair.get("density")
+    )
+    hairline = _clean_text(measured.get("hairline")) or _clean_text(
+        current_hair.get("hairline")
+    )
     if face_shape:
         grounded_in.append(f"formato facial: {face_shape}")
     if density:

@@ -3,6 +3,7 @@
 The pipeline never regenerates the person. It edits only a validated hair mask,
 verifies identity against real source photos, and fails closed to the original.
 """
+
 from dataclasses import dataclass
 from typing import Any, Dict, List, Protocol
 
@@ -46,7 +47,11 @@ class MaskedOverlayPipeline:
         denoising: float = 0.30,
         identity_weight: float = 0.90,
     ) -> Dict[str, Any]:
-        if not self.policy.min_reference_validations <= len(real_reference_photos) <= self.policy.max_reference_validations:
+        if (
+            not self.policy.min_reference_validations
+            <= len(real_reference_photos)
+            <= self.policy.max_reference_validations
+        ):
             return self._fallback(original_photo, "invalid_reference_count")
         if not self.policy.min_denoising <= denoising <= self.policy.max_denoising:
             return self._fallback(original_photo, "unsafe_denoising")
@@ -55,7 +60,9 @@ class MaskedOverlayPipeline:
 
         mask_result = self.mask_adapter.build_hair_mask(original_photo)
         if not mask_result.get("valid"):
-            return self._fallback(original_photo, mask_result.get("reason") or "hair_mask_failed")
+            return self._fallback(
+                original_photo, mask_result.get("reason") or "hair_mask_failed"
+            )
         if mask_result.get("protected_regions_touched"):
             return self._fallback(original_photo, "protected_region_in_mask")
         if mask_result.get("beard_enabled") is True:
@@ -72,7 +79,9 @@ class MaskedOverlayPipeline:
             identity_weight=identity_weight,
         )
 
-        scores = [self.verifier.compare(candidate, ref) for ref in real_reference_photos]
+        scores = [
+            self.verifier.compare(candidate, ref) for ref in real_reference_photos
+        ]
         if any(score < self.policy.identity_threshold for score in scores):
             return self._fallback(
                 original_photo,

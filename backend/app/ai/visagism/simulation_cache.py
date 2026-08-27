@@ -3,18 +3,20 @@
 Generated image bytes live in S3. Analysis.visagism stores only stable metadata
 and object keys, so no migration or large base64 payload is required.
 """
+
 from __future__ import annotations
 
 import hashlib
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, Optional
 
-
 CACHE_FIELD = "simulation_cache_v1"
 PIPELINE_VERSION = "hair-p1-v1"
 
 
-def cache_key(*, haircut_name: str, source_photo_id: str, provider: str, model: str) -> str:
+def cache_key(
+    *, haircut_name: str, source_photo_id: str, provider: str, model: str
+) -> str:
     raw = "|".join(
         (
             PIPELINE_VERSION,

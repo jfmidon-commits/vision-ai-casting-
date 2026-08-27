@@ -1,4 +1,5 @@
 """Fail-closed orchestration for identity-safe haircut simulation."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -6,7 +7,12 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 from .card_photo_guard import DEFAULT_CARD_PHOTO_GUARD, CardPhotoGuard
 from .identity_lock import DEFAULT_IDENTITY_LOCK, IdentityLockPolicy
-from .masked_overlay_pipeline import IdentityVerifier, MaskAdapter, MaskedOverlayPipeline, OverlayRenderer
+from .masked_overlay_pipeline import (
+    IdentityVerifier,
+    MaskAdapter,
+    MaskedOverlayPipeline,
+    OverlayRenderer,
+)
 from .pixel_locked_renderer import PixelLockedRenderer
 
 
@@ -24,7 +30,11 @@ class VisagismSimulationService:
         original_photo: Any,
         real_reference_photos: List[Any],
     ) -> Dict[str, Any]:
-        if not self.policy.min_reference_validations <= len(real_reference_photos) <= self.policy.max_reference_validations:
+        if (
+            not self.policy.min_reference_validations
+            <= len(real_reference_photos)
+            <= self.policy.max_reference_validations
+        ):
             return {
                 "eligible": False,
                 "reason": "invalid_reference_count",
@@ -204,7 +214,9 @@ class VisagismSimulationService:
         reason: str,
         diagnostics: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        original = self.card_guard.select_person_photo(source_photos, preferred_original)
+        original = self.card_guard.select_person_photo(
+            source_photos, preferred_original
+        )
         publication = {
             "image": original,
             "mode": "original_plus_spec",

@@ -3,6 +3,7 @@
 All selections are explicit and fail closed. Missing credentials never fall
 back to an unconfigured or heavyweight verifier silently.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass

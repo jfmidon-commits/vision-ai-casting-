@@ -4,6 +4,7 @@ The provider works on a bounded-resolution copy for predictable cost/latency.
 The generated hair candidate is restored to the exact source dimensions before
 PixelLockedRenderer composites it over the immutable full-resolution original.
 """
+
 from __future__ import annotations
 
 import base64
