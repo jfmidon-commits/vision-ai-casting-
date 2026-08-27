@@ -29,17 +29,17 @@ jobs:
       - name: Get changed Python files
         id: changed-files
         run: |
-          cd backend
           if [ "${{ github.event_name }}" == "pull_request" ]; then
-            CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep '^app/.*\.py$' || true)
+            CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep '^backend/app/.*\.py$' | sed 's#^backend/##' | paste -sd ' ' - || true)
           else
-            CHANGED=$(git diff --name-only HEAD~1 HEAD | grep '^app/.*\.py$' || true)
+            CHANGED=$(git diff --name-only HEAD~1 HEAD | grep '^backend/app/.*\.py$' | sed 's#^backend/##' | paste -sd ' ' - || true)
           fi
           if [ -z "$CHANGED" ]; then
             echo "No Python files changed. Skipping lint checks."
             echo "skip=true" >> $GITHUB_OUTPUT
             echo "files=" >> $GITHUB_OUTPUT
           else
+            echo "Changed backend Python files: $CHANGED"
             echo "skip=false" >> $GITHUB_OUTPUT
             echo "files=$CHANGED" >> $GITHUB_OUTPUT
           fi
