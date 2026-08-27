@@ -34,9 +34,7 @@ def build_haircut_edit_instruction(haircut_name: str, visagism: Dict[str, Any]) 
     texture = _clean(measured.get("hair_texture")) or _clean(
         current_hair.get("texture")
     )
-    hair_color = _clean(measured.get("hair_color")) or _clean(
-        current_hair.get("color")
-    )
+    hair_color = _clean(measured.get("hair_color")) or _clean(current_hair.get("color"))
 
     if density:
         grounded_details.append(f"visible measured hair density: {density}")
