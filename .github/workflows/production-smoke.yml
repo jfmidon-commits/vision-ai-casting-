@@ -13,14 +13,31 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
-      - name: Wait for the exact main revision on Render
+      - name: Checkout main history
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Resolve latest backend revision
+        id: expected
+        run: |
+          expected_sha="$(git log -1 --format=%H -- backend)"
+          if [ -z "${expected_sha}" ]; then
+            echo "Could not resolve a backend revision."
+            exit 1
+          fi
+          echo "sha=${expected_sha}" >> "$GITHUB_OUTPUT"
+          echo "Latest backend revision: ${expected_sha}"
+
+      - name: Wait for the expected backend revision on Render
         env:
           HEALTH_URL: https://vision-ai-casting-api.onrender.com/health
-          EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
+          EXPECTED_SHA: ${{ steps.expected.outputs.sha }}
         run: |
           set -euo pipefail
 
-          echo "Waiting for Render to serve commit: ${EXPECTED_SHA}"
+          echo "Waiting for Render to serve backend commit: ${EXPECTED_SHA}"
           echo "Health endpoint: ${HEALTH_URL}"
 
           for attempt in $(seq 1 30); do
@@ -32,7 +49,7 @@ jobs:
             echo "Attempt ${attempt}/30: status=${status:-unavailable} commit=${commit:-unavailable} version=${version:-unknown}"
 
             if [ "${status}" = "healthy" ] && [ "${commit}" = "${EXPECTED_SHA}" ]; then
-              echo "Render production is healthy and is serving the expected revision."
+              echo "Render production is healthy and is serving the expected backend revision."
               exit 0
             fi
 
@@ -41,7 +58,7 @@ jobs:
             fi
           done
 
-          echo "Render did not expose the expected revision within the smoke-test window."
-          echo "Expected: ${EXPECTED_SHA}"
+          echo "Render did not expose the expected backend revision within the smoke-test window."
+          echo "Expected backend revision: ${EXPECTED_SHA}"
           echo "Last response: ${response:-<empty>}"
           exit 1
