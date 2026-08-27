@@ -12,6 +12,7 @@ import json
 from typing import Any, Dict, List, Optional
 
 import openai
+
 from app.ai.visagism.fallback_ranker import rank_fallback_hairstyles
 from app.config import settings
 
