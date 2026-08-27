@@ -114,19 +114,12 @@ def _advisory_lock_id(*parts: str) -> int:
 
 
 async def _try_simulation_lock(db: AsyncSession, lock_id: int) -> bool:
+    # Transaction-scoped locks are released automatically on commit/rollback,
+    # so a pooled connection can never carry a stale generation lock.
     result = await db.execute(
-        text("SELECT pg_try_advisory_lock(:lock_id)"), {"lock_id": lock_id}
+        text("SELECT pg_try_advisory_xact_lock(:lock_id)"), {"lock_id": lock_id}
     )
     return bool(result.scalar())
-
-
-async def _release_simulation_lock(db: AsyncSession, lock_id: int) -> None:
-    try:
-        await db.execute(
-            text("SELECT pg_advisory_unlock(:lock_id)"), {"lock_id": lock_id}
-        )
-    except Exception:
-        logger.exception("Failed to release visagism simulation advisory lock")
 
 
 @router.get("", response_model=APIResponse)
@@ -399,9 +392,7 @@ async def simulate_visagism_haircut(
             message="Simulation blocked safely",
         )
 
-    reference_images = [
-        item for item in downloaded if not isinstance(item, Exception)
-    ]
+    reference_images = [item for item in downloaded if not isinstance(item, Exception)]
     if not 3 <= len(reference_images) <= 5:
         return APIResponse(
             data=_public_simulation_contract(
@@ -520,7 +511,11 @@ async def simulate_visagism_haircut(
 
         scores = [float(score) for score in service_result.get("identity_scores") or []]
         min_score = min(scores) if scores else 0.0
-        mask_meta = service_result.get("mask") if isinstance(service_result.get("mask"), dict) else {}
+        mask_meta = (
+            service_result.get("mask")
+            if isinstance(service_result.get("mask"), dict)
+            else {}
+        )
         analysis.visagism = with_ready_entry(
             visagism,
             key=exact_key,
@@ -557,7 +552,10 @@ async def simulate_visagism_haircut(
             message="Simulation completed successfully",
         )
     finally:
-        await _release_simulation_lock(db, lock_id)
+        # Releases pg_try_advisory_xact_lock on every early return. A successful
+        # cache write already committed and therefore already released it.
+        if db.in_transaction():
+            await db.rollback()
 
 
 @router.get("/{analysis_id}/casting", response_model=APIResponse)
