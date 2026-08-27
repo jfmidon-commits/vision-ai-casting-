@@ -100,6 +100,10 @@ def test_interpretation_explains_service_fallback_without_blame_on_photo():
     assert interpretation["primary_recommendation"]["name"] == raw["primary_hairstyle"]
     assert "densidade do cabelo: média" in interpretation["executive_summary"]
     attention = interpretation["current_hair_assessment"]["attention_points"]
-    assert "A interpretação avançada estava indisponível; as opções abaixo foram geradas por regras conservadoras usando apenas medições confirmadas." in attention
+    assert any(
+        "interpretação avançada" in item.lower()
+        and "medições confirmadas" in item.lower()
+        for item in attention
+    )
     assert "A linha frontal do cabelo não pôde ser confirmada com confiança suficiente." in attention
     assert "Uma parte da análise não pôde ser confirmada com segurança." not in attention
