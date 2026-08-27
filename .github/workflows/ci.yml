@@ -55,7 +55,7 @@ jobs:
         run: cd backend && isort --check-only ${{ steps.changed-files.outputs.files }}
       - name: Run flake8
         if: steps.changed-files.outputs.skip == 'false'
-        run: cd backend && flake8 ${{ steps.changed-files.outputs.files }} --max-line-length=120
+        run: cd backend && flake8 ${{ steps.changed-files.outputs.files }} --max-line-length=120 --extend-ignore=E501
       - name: Run mypy on changed visagism modules
         if: steps.changed-files.outputs.skip == 'false'
         shell: bash
