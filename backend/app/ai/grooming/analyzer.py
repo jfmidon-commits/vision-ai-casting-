@@ -501,7 +501,20 @@ class GroomingAnalyzer:
         # Textura
         if len(face_gray_for_analysis) > 100:
             sample = face_gray_for_analysis[: min(10000, len(face_gray_for_analysis))]
-            sample_2d = sample.reshape(int(np.sqrt(len(sample))), -1)
+            # Correção defensiva: int(sqrt(len(sample))) só produz um
+            # reshape válido quando len(sample) é divisível por esse
+            # valor -- praticamente nunca garantido, já que len(sample)
+            # depende do tamanho da região de pele detectada por foto.
+            # Bug real em produção: len(sample)=1869, sqrt truncada=43,
+            # 1869 não é divisível por 43 -> ValueError: cannot reshape
+            # array of size 1869 into shape (43,newaxis).
+            # Fix: usar exatamente side*side elementos (<= len(sample)
+            # por construção, já que side = floor(sqrt(len(sample)))),
+            # garantindo que o reshape sempre seja válido. No máximo
+            # descarta (side*2)-1 pixels de uma amostra de até 10000 --
+            # irrelevante para a variância de textura calculada a seguir.
+            side = int(np.sqrt(len(sample)))
+            sample_2d = sample[: side * side].reshape(side, side)
             laplacian = cv2.Laplacian(sample_2d.astype(np.uint8), cv2.CV_64F)
             texture_var = laplacian.var()
         else:
@@ -616,8 +629,12 @@ class GroomingAnalyzer:
             beard_pixels_color = self._get_region_pixels(face_color, beard_mask)
 
             if len(beard_pixels_gray) > 0:
-                beard_region = beard_pixels_gray.reshape(
-                    int(np.sqrt(len(beard_pixels_gray))), -1
+                # Mesma correção defensiva do bloco de textura acima:
+                # int(sqrt(n)) nem sempre divide n, o que já quebrou em
+                # produção. Usa exatamente side*side pixels.
+                beard_side = int(np.sqrt(len(beard_pixels_gray)))
+                beard_region = beard_pixels_gray[: beard_side * beard_side].reshape(
+                    beard_side, beard_side
                 )
                 beard_color_region = beard_pixels_color
             else:
@@ -631,16 +648,18 @@ class GroomingAnalyzer:
             return BeardMetrics(0, 0, "none", 0, 0, 0)
 
         # Detectar cobertura
-        beard_laplacian = (
-            cv2.Laplacian(
-                beard_region.reshape(
-                    int(np.sqrt(max(1, beard_region.size))), -1
-                ).astype(np.uint8),
-                cv2.CV_64F,
+        # Mesma correção defensiva (ver bloco de textura acima). Este
+        # branch (ndim==1) provavelmente não é mais alcançado depois da
+        # correção de beard_region acima -- que agora sempre produz um
+        # array 2D -- mas mantido correto por segurança/consistência.
+        if beard_region.ndim == 1:
+            laplacian_side = int(np.sqrt(max(1, beard_region.size)))
+            beard_laplacian_input = beard_region[: laplacian_side * laplacian_side].reshape(
+                laplacian_side, laplacian_side
             )
-            if beard_region.ndim == 1
-            else cv2.Laplacian(beard_region, cv2.CV_64F)
-        )
+            beard_laplacian = cv2.Laplacian(beard_laplacian_input.astype(np.uint8), cv2.CV_64F)
+        else:
+            beard_laplacian = cv2.Laplacian(beard_region, cv2.CV_64F)
 
         beard_texture = beard_laplacian.var() if beard_laplacian.size > 0 else 0
         upper_face = face_gray[: int(h * 0.55), :]
