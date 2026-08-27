@@ -19,6 +19,14 @@ class Settings(BaseSettings):
     OPENAI_MAX_TOKENS: int = 2500
     OPENAI_TEMPERATURE: float = 0.3
 
+    # Identity-safe visual haircut simulation. Disabled by default and enabled
+    # only when an explicit provider + server-side credential are configured.
+    VISAGISM_SIMULATION_PROVIDER: str = "disabled"
+    VISAGISM_SIMULATION_MODEL: str = "fal-ai/flux-general/inpainting"
+    VISAGISM_SIMULATION_TIMEOUT_SECONDS: int = 120
+    VISAGISM_IDENTITY_PROVIDER: str = "disabled"
+    FAL_KEY: str = ""
+
     AWS_ACCESS_KEY_ID: str = ""
     AWS_SECRET_ACCESS_KEY: str = ""
     AWS_REGION: str = "us-east-1"
