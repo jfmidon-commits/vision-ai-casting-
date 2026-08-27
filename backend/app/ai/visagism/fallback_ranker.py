@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Sequence
 
-
 _METRIC_LABELS = {
     "coverage_score": "cobertura",
     "volume_score": "volume",

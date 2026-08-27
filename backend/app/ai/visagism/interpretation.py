@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-
 _LIMITATION_COPY = {
     "all_photos_rejected_by_triage": "As fotos enviadas não passaram na triagem automática.",
     "photo_rejected_by_triage": "A foto não passou na triagem automática.",

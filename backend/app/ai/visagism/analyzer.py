@@ -15,7 +15,6 @@ import openai
 from app.ai.visagism.fallback_ranker import rank_fallback_hairstyles
 from app.config import settings
 
-
 _FALLBACK_HAIRSTYLES = {
     "round": [
         "Quiff texturizado",
