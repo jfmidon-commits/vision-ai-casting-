@@ -95,7 +95,7 @@ def test_limitations_are_human_readable_not_raw_codes():
     assert len(result["limitations"]) == 2
 
 
-def test_rule_based_result_translates_round_and_hides_technical_fallback_copy():
+def test_rule_based_result_translates_round_and_marks_partial_fallback():
     raw = {
         "recommended_hairstyles": [
             "Quiff texturizado",
@@ -127,7 +127,7 @@ def test_rule_based_result_translates_round_and_hides_technical_fallback_copy():
 
     result = build_visagism_interpretation(raw)
 
-    assert result["status"] == "ready"
+    assert result["status"] == "partial_grounded"
     assert "formato facial: redondo" in result["executive_summary"]
     assert "round" not in result["executive_summary"]
     assert "Fallback" not in result["primary_recommendation"]["why_it_works"]
