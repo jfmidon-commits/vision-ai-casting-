@@ -11,10 +11,19 @@ from typing import Any, Dict, Iterable, Optional
 
 
 CACHE_FIELD = "simulation_cache_v1"
+PIPELINE_VERSION = "hair-p1-v1"
 
 
 def cache_key(*, haircut_name: str, source_photo_id: str, provider: str, model: str) -> str:
-    raw = "|".join((haircut_name.strip(), source_photo_id, provider.strip(), model.strip()))
+    raw = "|".join(
+        (
+            PIPELINE_VERSION,
+            haircut_name.strip(),
+            source_photo_id,
+            provider.strip(),
+            model.strip(),
+        )
+    )
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
 
 
@@ -43,6 +52,8 @@ def find_ready(
     for item in entries(visagism).values():
         if item.get("status") != "ready":
             continue
+        if item.get("pipeline_version") != PIPELINE_VERSION:
+            continue
         if item.get("haircut_name") != haircut_name:
             continue
         if item.get("source_photo_id") != source_photo_id:
@@ -56,7 +67,11 @@ def find_ready(
         matches.append(item)
     if not matches:
         return None
-    return sorted(matches, key=lambda item: str(item.get("created_at") or ""), reverse=True)[0]
+    return sorted(
+        matches,
+        key=lambda item: str(item.get("created_at") or ""),
+        reverse=True,
+    )[0]
 
 
 def ready_for_source(
@@ -66,10 +81,15 @@ def ready_for_source(
         item
         for item in entries(visagism).values()
         if item.get("status") == "ready"
+        and item.get("pipeline_version") == PIPELINE_VERSION
         and item.get("source_photo_id") == source_photo_id
         and item.get("object_key")
     ]
-    return sorted(items, key=lambda item: str(item.get("created_at") or ""), reverse=True)
+    return sorted(
+        items,
+        key=lambda item: str(item.get("created_at") or ""),
+        reverse=True,
+    )
 
 
 def with_ready_entry(
@@ -88,6 +108,7 @@ def with_ready_entry(
     cache = entries(updated)
     cache[key] = {
         "status": "ready",
+        "pipeline_version": PIPELINE_VERSION,
         "haircut_name": haircut_name,
         "source_photo_id": source_photo_id,
         "provider": provider,
