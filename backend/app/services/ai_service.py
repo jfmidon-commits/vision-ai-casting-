@@ -1,3 +1,5 @@
+import ctypes
+import gc
 import io
 import os
 import tempfile
@@ -48,6 +50,51 @@ def _is_facial_mock(result: Any) -> bool:
     return False
 
 
+def _close_native_resource(obj: Any) -> None:
+    """Best-effort close of MediaPipe/native resources held by an analyzer."""
+    if obj is None:
+        return
+
+    candidates = [obj]
+    mediapipe_service = getattr(obj, "mediapipe", None)
+    if mediapipe_service is not None:
+        candidates.append(mediapipe_service)
+
+    for candidate in candidates:
+        for attr in ("_face_mesh", "_face_landmarker", "_pose_landmarker"):
+            resource = getattr(candidate, attr, None)
+            if resource is None:
+                continue
+            try:
+                close = getattr(resource, "close", None)
+                if callable(close):
+                    close()
+            except Exception:
+                pass
+            try:
+                setattr(candidate, attr, None)
+            except Exception:
+                pass
+
+
+def _release_process_memory(*objects: Any) -> None:
+    """Release analyzer references and return free glibc arenas to the OS when possible."""
+    for obj in objects:
+        _close_native_resource(obj)
+
+    gc.collect()
+
+    # Render runs Linux/glibc. malloc_trim returns free heap pages to the OS,
+    # which matters for a long-lived 512 MiB worker doing repeated analyses.
+    try:
+        libc = ctypes.CDLL("libc.so.6")
+        trim = getattr(libc, "malloc_trim", None)
+        if trim is not None:
+            trim(0)
+    except Exception:
+        pass
+
+
 class AIService:
     @classmethod
     async def run_analysis(
@@ -60,6 +107,10 @@ class AIService:
         from app.database import AsyncSessionLocal
         from app.models import Analysis, Photo
         from sqlalchemy import select
+
+        # A previous analysis may have left native allocator arenas behind.
+        _release_process_memory()
+        log_rss("analysis_start_after_gc", analysis_id)
 
         async with AsyncSessionLocal() as db:
             result = await db.execute(select(Analysis).where(Analysis.id == analysis_id))
@@ -171,6 +222,9 @@ class AIService:
                                     pass
                         triage_results.append(entry)
 
+                    _release_process_memory(triage_engine)
+                    log_rss("triage_released", analysis_id)
+
                 if not approved_preprocessed:
                     triage_blocked = True
 
@@ -188,29 +242,57 @@ class AIService:
                 if "facial" in analysis_types and pipeline_photos:
                     from app.ai.facial_analysis.analyzer import FacialAnalyzer
 
-                    log_rss("facial_start", analysis_id)
-                    facial_out = await FacialAnalyzer().analyze(pipeline_photos)
-                    if _is_facial_mock(facial_out):
+                    facial_analyzer = FacialAnalyzer()
+                    try:
+                        log_rss("facial_start", analysis_id)
+                        facial_out = await facial_analyzer.analyze(pipeline_photos)
+                        if _is_facial_mock(facial_out):
+                            parallel_results["facial_structure"] = {
+                                "is_mock": True,
+                                "face_shape": None,
+                                "sources": (facial_out or {}).get("sources")
+                                or {"mock": "mock"},
+                            }
+                            engine_errors.append("facial_result_is_mock")
+                        else:
+                            parallel_results["facial_structure"] = facial_out
+                        log_rss("facial_end", analysis_id)
+                    except Exception as exc:
+                        engine_errors.append(f"facial_error:{type(exc).__name__}:{exc}")
                         parallel_results["facial_structure"] = {
+                            "error": str(exc),
                             "is_mock": True,
                             "face_shape": None,
-                            "sources": (facial_out or {}).get("sources")
-                            or {"mock": "mock"},
+                            "sources": {"facial": "failed"},
                         }
-                        engine_errors.append("facial_result_is_mock")
-                    else:
-                        parallel_results["facial_structure"] = facial_out
-                    log_rss("facial_end", analysis_id)
+                    finally:
+                        _release_process_memory(facial_analyzer)
+                        facial_analyzer = None
+                        log_rss("facial_released", analysis_id)
 
                 if "expressions" in analysis_types:
                     if image_bytes:
                         from app.ai.expressions.analyzer import ExpressionAnalyzer
 
-                        log_rss("expressions_start", analysis_id)
-                        parallel_results["expressions"] = ExpressionAnalyzer().analyze(
-                            image_bytes
-                        )
-                        log_rss("expressions_end", analysis_id)
+                        expression_analyzer = ExpressionAnalyzer()
+                        try:
+                            log_rss("expressions_start", analysis_id)
+                            parallel_results["expressions"] = expression_analyzer.analyze(
+                                image_bytes
+                            )
+                            log_rss("expressions_end", analysis_id)
+                        except Exception as exc:
+                            engine_errors.append(
+                                f"expressions_error:{type(exc).__name__}:{exc}"
+                            )
+                            parallel_results["expressions"] = {
+                                "error": str(exc),
+                                "confidence": 0.0,
+                            }
+                        finally:
+                            _release_process_memory(expression_analyzer)
+                            expression_analyzer = None
+                            log_rss("expressions_released", analysis_id)
                     else:
                         engine_errors.append("expressions_no_image_bytes")
 
@@ -218,11 +300,25 @@ class AIService:
                     if image_bytes:
                         from app.ai.photogenic.analyzer import PhotogenicAnalyzer
 
-                        log_rss("photogenic_start", analysis_id)
-                        parallel_results["photogenic"] = PhotogenicAnalyzer().analyze(
-                            image_bytes
-                        )
-                        log_rss("photogenic_end", analysis_id)
+                        photogenic_analyzer = PhotogenicAnalyzer()
+                        try:
+                            log_rss("photogenic_start", analysis_id)
+                            parallel_results["photogenic"] = photogenic_analyzer.analyze(
+                                image_bytes
+                            )
+                            log_rss("photogenic_end", analysis_id)
+                        except Exception as exc:
+                            engine_errors.append(
+                                f"photogenic_error:{type(exc).__name__}:{exc}"
+                            )
+                            parallel_results["photogenic"] = {
+                                "error": str(exc),
+                                "confidence": 0.0,
+                            }
+                        finally:
+                            _release_process_memory(photogenic_analyzer)
+                            photogenic_analyzer = None
+                            log_rss("photogenic_released", analysis_id)
                     else:
                         engine_errors.append("photogenic_no_image_bytes")
 
@@ -230,11 +326,25 @@ class AIService:
                     if image_bytes:
                         from app.ai.colorimetry.analyzer import ColorimetryAnalyzer
 
-                        log_rss("colorimetry_start", analysis_id)
-                        parallel_results["colorimetry"] = ColorimetryAnalyzer().analyze(
-                            image_bytes
-                        )
-                        log_rss("colorimetry_end", analysis_id)
+                        colorimetry_analyzer = ColorimetryAnalyzer()
+                        try:
+                            log_rss("colorimetry_start", analysis_id)
+                            parallel_results["colorimetry"] = colorimetry_analyzer.analyze(
+                                image_bytes
+                            )
+                            log_rss("colorimetry_end", analysis_id)
+                        except Exception as exc:
+                            engine_errors.append(
+                                f"colorimetry_error:{type(exc).__name__}:{exc}"
+                            )
+                            parallel_results["colorimetry"] = {
+                                "error": str(exc),
+                                "confidence": 0.0,
+                            }
+                        finally:
+                            _release_process_memory(colorimetry_analyzer)
+                            colorimetry_analyzer = None
+                            log_rss("colorimetry_released", analysis_id)
                     else:
                         engine_errors.append("colorimetry_no_image_bytes")
 
@@ -242,13 +352,35 @@ class AIService:
                     if image_bytes:
                         from app.ai.grooming.analyzer import GroomingAnalyzer
 
-                        log_rss("grooming_start", analysis_id)
-                        parallel_results["grooming"] = GroomingAnalyzer().analyze(
-                            image_bytes
-                        )
-                        log_rss("grooming_end", analysis_id)
+                        grooming_analyzer = GroomingAnalyzer()
+                        try:
+                            log_rss("grooming_start", analysis_id)
+                            parallel_results["grooming"] = grooming_analyzer.analyze(
+                                image_bytes
+                            )
+                            log_rss("grooming_end", analysis_id)
+                        except Exception as exc:
+                            # Grooming is useful but must never abort the whole visagism
+                            # pipeline. The analyzer can hit image-dependent CV edge cases;
+                            # surface them as a limitation and keep producing the report.
+                            engine_errors.append(
+                                f"grooming_error:{type(exc).__name__}:{exc}"
+                            )
+                            parallel_results["grooming"] = grooming_analyzer._error_result(
+                                f"Grooming indisponivel nesta foto: {exc}"
+                            )
+                        finally:
+                            _release_process_memory(grooming_analyzer)
+                            grooming_analyzer = None
+                            log_rss("grooming_released", analysis_id)
                     else:
                         engine_errors.append("grooming_no_image_bytes")
+
+            # Byte-based analyzers are done. Drop the JPEG buffer before the
+            # visagism/consolidation stages and aggressively return free arenas.
+            image_bytes = None
+            _release_process_memory()
+            log_rss("heavy_analyzers_released", analysis_id)
 
             context = {
                 "parallel_results": parallel_results,
@@ -280,28 +412,42 @@ class AIService:
                 else:
                     from app.ai.visagism.analyzer import VisagismAnalyzer
 
-                    log_rss("visagism_start", analysis_id)
-                    sequential_results["visagism"] = await VisagismAnalyzer().analyze(
-                        pipeline_photos,
-                        context,
-                    )
-                    log_rss("visagism_end", analysis_id)
+                    visagism_analyzer = VisagismAnalyzer()
+                    try:
+                        log_rss("visagism_start", analysis_id)
+                        sequential_results["visagism"] = await visagism_analyzer.analyze(
+                            pipeline_photos,
+                            context,
+                        )
+                        log_rss("visagism_end", analysis_id)
+                    finally:
+                        _release_process_memory(visagism_analyzer)
+                        visagism_analyzer = None
+                        log_rss("visagism_released", analysis_id)
 
             if "casting" in analysis_types:
                 from app.ai.casting.analyzer import CastingAnalyzer
 
-                sequential_results["casting"] = await CastingAnalyzer().analyze(
-                    pipeline_photos or preprocessed,
-                    context,
-                )
+                casting_analyzer = CastingAnalyzer()
+                try:
+                    sequential_results["casting"] = await casting_analyzer.analyze(
+                        pipeline_photos or preprocessed,
+                        context,
+                    )
+                finally:
+                    _release_process_memory(casting_analyzer)
 
             if "branding" in analysis_types:
                 from app.ai.branding.analyzer import BrandingAnalyzer
 
-                sequential_results["branding"] = await BrandingAnalyzer().analyze(
-                    pipeline_photos or preprocessed,
-                    context,
-                )
+                branding_analyzer = BrandingAnalyzer()
+                try:
+                    sequential_results["branding"] = await branding_analyzer.analyze(
+                        pipeline_photos or preprocessed,
+                        context,
+                    )
+                finally:
+                    _release_process_memory(branding_analyzer)
 
             all_results = {**parallel_results, **sequential_results}
 
@@ -334,6 +480,11 @@ class AIService:
 
             await db.commit()
 
+            # Do not let native CV/MediaPipe allocations accumulate across
+            # analyses in the same long-lived Render worker.
+            _release_process_memory(consolidator)
+            log_rss("analysis_end_after_gc", analysis_id)
+
     @classmethod
     async def analyze_facial(cls, photo):
         preprocessor = ImagePreprocessor()
@@ -343,7 +494,10 @@ class AIService:
         from app.ai.facial_analysis.analyzer import FacialAnalyzer
 
         analyzer = FacialAnalyzer()
-        return await analyzer.analyze_single(preprocessed)
+        try:
+            return await analyzer.analyze_single(preprocessed)
+        finally:
+            _release_process_memory(analyzer)
 
     @classmethod
     async def analyze_visagism(cls, photo, parallel_results: Dict = None):
@@ -394,6 +548,7 @@ class AIService:
                     os.unlink(tmp_path)
                 except OSError:
                     pass
+            _release_process_memory(triage_engine)
 
         if not approved:
             return {
@@ -417,39 +572,57 @@ class AIService:
 
         if image_bytes:
             if "grooming" not in pr:
+                grooming_analyzer = None
                 try:
                     from app.ai.grooming.analyzer import GroomingAnalyzer
 
-                    pr["grooming"] = GroomingAnalyzer().analyze(image_bytes)
-                except Exception:
-                    pass
+                    grooming_analyzer = GroomingAnalyzer()
+                    pr["grooming"] = grooming_analyzer.analyze(image_bytes)
+                except Exception as exc:
+                    pr["grooming"] = {"error": str(exc), "confidence": "low"}
+                finally:
+                    _release_process_memory(grooming_analyzer)
             if "colorimetry" not in pr:
+                colorimetry_analyzer = None
                 try:
                     from app.ai.colorimetry.analyzer import ColorimetryAnalyzer
 
-                    pr["colorimetry"] = ColorimetryAnalyzer().analyze(image_bytes)
+                    colorimetry_analyzer = ColorimetryAnalyzer()
+                    pr["colorimetry"] = colorimetry_analyzer.analyze(image_bytes)
                 except Exception:
                     pass
+                finally:
+                    _release_process_memory(colorimetry_analyzer)
             if "photogenic" not in pr:
+                photogenic_analyzer = None
                 try:
                     from app.ai.photogenic.analyzer import PhotogenicAnalyzer
 
-                    pr["photogenic"] = PhotogenicAnalyzer().analyze(image_bytes)
+                    photogenic_analyzer = PhotogenicAnalyzer()
+                    pr["photogenic"] = photogenic_analyzer.analyze(image_bytes)
                 except Exception:
                     pass
+                finally:
+                    _release_process_memory(photogenic_analyzer)
             if "expressions" not in pr:
+                expression_analyzer = None
                 try:
                     from app.ai.expressions.analyzer import ExpressionAnalyzer
 
-                    pr["expressions"] = ExpressionAnalyzer().analyze(image_bytes)
+                    expression_analyzer = ExpressionAnalyzer()
+                    pr["expressions"] = expression_analyzer.analyze(image_bytes)
                 except Exception:
                     pass
+                finally:
+                    _release_process_memory(expression_analyzer)
 
         if "facial_structure" not in pr:
+            facial_analyzer = None
             try:
                 from app.ai.facial_analysis.analyzer import FacialAnalyzer
 
-                facial_out = await FacialAnalyzer().analyze_single(preprocessed)
+                facial_analyzer = FacialAnalyzer()
+                facial_out = await facial_analyzer.analyze_single(preprocessed)
                 if _is_facial_mock(facial_out):
                     pr["facial_structure"] = {
                         "is_mock": True,
@@ -461,6 +634,8 @@ class AIService:
                     pr["facial_structure"] = facial_out
             except Exception:
                 pass
+            finally:
+                _release_process_memory(facial_analyzer)
 
         context = {
             "parallel_results": pr,
@@ -469,7 +644,10 @@ class AIService:
         from app.ai.visagism.analyzer import VisagismAnalyzer
 
         analyzer = VisagismAnalyzer()
-        return await analyzer.analyze_single(preprocessed, context=context)
+        try:
+            return await analyzer.analyze_single(preprocessed, context=context)
+        finally:
+            _release_process_memory(analyzer)
 
     @classmethod
     async def analyze_casting(cls, photo):
@@ -480,4 +658,7 @@ class AIService:
         from app.ai.casting.analyzer import CastingAnalyzer
 
         analyzer = CastingAnalyzer()
-        return await analyzer.analyze_single(preprocessed)
+        try:
+            return await analyzer.analyze_single(preprocessed)
+        finally:
+            _release_process_memory(analyzer)
