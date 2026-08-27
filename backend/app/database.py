@@ -9,6 +9,7 @@ except ImportError:
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.pool import NullPool
 from app.config import settings
+from app.utils.json_serialization import json_dumps
 
 # Supabase/Render commonly provide PostgreSQL URLs as ``postgresql://``.
 # This backend uses SQLAlchemy's async engine, so force the asyncpg dialect
@@ -25,6 +26,7 @@ engine = create_async_engine(
     pool_size=settings.DATABASE_POOL_SIZE,
     max_overflow=settings.DATABASE_MAX_OVERFLOW,
     pool_pre_ping=True,
+    json_serializer=json_dumps,
 )
 
 AsyncSessionLocal = async_sessionmaker(
