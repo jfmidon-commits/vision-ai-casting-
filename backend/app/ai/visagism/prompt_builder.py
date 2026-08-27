@@ -34,7 +34,9 @@ def build_haircut_edit_instruction(haircut_name: str, visagism: Dict[str, Any]) 
     texture = _clean(measured.get("hair_texture")) or _clean(
         current_hair.get("texture")
     )
-    hair_color = _clean(measured.get("hair_color")) or _clean(current_hair.get("color"))
+    hair_color = _clean(measured.get("hair_color")) or _clean(
+        current_hair.get("color")
+    )
 
     if density:
         grounded_details.append(f"visible measured hair density: {density}")
@@ -48,15 +50,20 @@ def build_haircut_edit_instruction(haircut_name: str, visagism: Dict[str, Any]) 
         + "; ".join(grounded_details)
         + "."
         if grounded_details
-        else " Do not invent hair density, texture, color, hairline, or length that cannot be inferred from the source image."
+        else (
+            " Do not invent hair density, texture, color, hairline, or length "
+            "that cannot be inferred from the source image."
+        )
     )
 
     return (
         "Edit only the hair inside the supplied hair mask. "
-        "Keep every unmasked pixel unchanged. Preserve the exact person's identity and face geometry, "
-        "expression, eyes, eyebrows, nose, mouth, teeth, ears, skin, beard, neck, body, clothing, and background. "
+        "Keep every unmasked pixel unchanged. Preserve the exact person's "
+        "identity and face geometry, expression, eyes, eyebrows, nose, mouth, "
+        "teeth, ears, skin, beard, neck, body, clothing, and background. "
         f"Create a photorealistic haircut preview for: {haircut_name}. "
-        "Respect the visible natural hairline and the source photo. Do not beautify, de-age, age, reshape, recolor skin, "
-        "or modify the beard. The result is a haircut preview, not a new portrait."
+        "Respect the visible natural hairline and the source photo. Do not "
+        "beautify, de-age, age, reshape, recolor skin, or modify the beard. "
+        "The result is a haircut preview, not a new portrait."
         + details
     )
