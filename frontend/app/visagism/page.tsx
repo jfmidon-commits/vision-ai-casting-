@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   PhotoUploadGuide,
@@ -8,8 +8,16 @@ import {
   VisagismPhotoDraft,
 } from "@/components/visagism/photo-upload-guide";
 import { VisagismResultView } from "@/components/visagism/visagism-result";
-import { analysisApi, photoApi, photoshootApi, profileApi } from "@/lib/api";
-import type { PhotoTriageResult, Profile, VisagismResult } from "@/types";
+import api, { analysisApi, photoApi, photoshootApi, profileApi } from "@/lib/api";
+import {
+  PersistedCompletedAnalysis,
+  clearActiveAnalysis,
+  getActiveAnalysis,
+  getLastCompletedAnalysis,
+  setActiveAnalysis,
+  setLastCompletedAnalysis,
+} from "@/lib/visagism-storage";
+import type { Analysis, PhotoTriageResult, Profile, VisagismResult } from "@/types";
 
 type Step = "landing" | "upload" | "review" | "processing" | "result" | "error";
 
@@ -18,13 +26,20 @@ type UploadedPhotoState = {
   triage: PhotoTriageResult;
 };
 
-type PersistedAnalysis = {
-  analysisId: string;
-  startedAt: number;
+type HistoryItem = {
+  id: string;
+  createdAt: string;
+  confidenceScore?: number;
+  faceShapeCategory?: string;
+  primaryHairstyle?: string | null;
 };
 
-const ACTIVE_ANALYSIS_STORAGE_KEY = "vision:visagism:active-analysis";
-const ACTIVE_ANALYSIS_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+type AnalysisDetail = Analysis & {
+  profile_id?: string;
+  completed_at?: string;
+};
+
+type RecoverySource = "url" | "local_storage" | "history" | "polling_completion";
 
 const initialPhotos: VisagismPhotoDraft[] = [
   {
@@ -49,6 +64,28 @@ const backendAngle: Record<VisagismPhotoAngle, string> = {
   three_quarter: "left_45",
   profile: "left_profile",
 };
+
+const faceShapeLabels: Record<string, string> = {
+  round: "Redondo",
+  redondo: "Redondo",
+  oval: "Oval",
+  square: "Quadrado",
+  quadrado: "Quadrado",
+  heart: "Coração",
+  coracao: "Coração",
+  coração: "Coração",
+  diamond: "Diamante",
+  diamante: "Diamante",
+  oblong: "Oblongo",
+  oblongo: "Oblongo",
+  triangular: "Triangular",
+  triangle: "Triangular",
+};
+
+function faceShapeLabel(value?: string) {
+  if (!value) return undefined;
+  return faceShapeLabels[value.toLowerCase()] || value;
+}
 
 function extractMessage(error: unknown): string {
   if (typeof error === "object" && error && "response" in error) {
@@ -76,10 +113,19 @@ function getStatusCode(error: unknown): number | undefined {
   return (error as { response?: { status?: number } }).response?.status;
 }
 
-function clearPersistedAnalysis() {
-  if (typeof window !== "undefined") {
-    window.localStorage.removeItem(ACTIVE_ANALYSIS_STORAGE_KEY);
+function replaceAnalysisIdInUrl(analysisId: string | null) {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  if (analysisId) {
+    url.searchParams.set("analysisId", analysisId);
+  } else {
+    url.searchParams.delete("analysisId");
   }
+  window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
+function logRecovery(event: string, data: Record<string, unknown>) {
+  console.info(`[${event}]`, data);
 }
 
 export default function VisagismPage() {
@@ -94,33 +140,143 @@ export default function VisagismPage() {
   const [analysisId, setAnalysisId] = useState<string | null>(null);
   const [result, setResult] = useState<VisagismResult | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
+  const [lastCompleted, setLastCompleted] = useState<PersistedCompletedAnalysis | null>(null);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
   const selectedCount = useMemo(() => photos.filter((photo) => photo.file).length, [photos]);
   const allSelected = selectedCount === photos.length;
   const allTriaged = photos.every((photo) => uploaded[photo.angle]?.triage?.accepted);
 
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(ACTIVE_ANALYSIS_STORAGE_KEY);
-      if (!raw) return;
-      const persisted = JSON.parse(raw) as PersistedAnalysis;
-      const isValid =
-        typeof persisted.analysisId === "string" &&
-        persisted.analysisId.length > 0 &&
-        typeof persisted.startedAt === "number" &&
-        Date.now() - persisted.startedAt < ACTIVE_ANALYSIS_MAX_AGE_MS;
-
-      if (!isValid) {
-        clearPersistedAnalysis();
-        return;
-      }
-
-      setAnalysisId(persisted.analysisId);
-      setStep("processing");
-    } catch {
-      clearPersistedAnalysis();
+  const showRecoveryError = useCallback((error: unknown) => {
+    const status = getStatusCode(error);
+    if (status === 404) {
+      setErrorMessage("Análise não encontrada. Ela pode ter sido removida ou o link pode estar incorreto.");
+    } else if (status === 401) {
+      setErrorMessage("Sua sessão expirou. Entre novamente para acessar a análise.");
+    } else if (status === 403) {
+      setErrorMessage("Você não tem permissão para acessar esta análise.");
+    } else {
+      setErrorMessage(extractMessage(error));
     }
+    setStep("error");
   }, []);
+
+  const loadResult = useCallback(
+    async (id: string, source: RecoverySource) => {
+      try {
+        const [analysisResponse, visagismResponse] = await Promise.all([
+          api.get(`/api/v1/analyses/${id}`),
+          analysisApi.getVisagism(id),
+        ]);
+        const analysisData = analysisResponse.data?.data as AnalysisDetail | undefined;
+        const visagismData = (visagismResponse.data?.data || {}) as VisagismResult;
+
+        setAnalysisId(id);
+        setResult(visagismData);
+        clearActiveAnalysis();
+        replaceAnalysisIdInUrl(id);
+
+        if (analysisData?.profile_id) {
+          const parsedCompletedAt = analysisData.completed_at
+            ? Date.parse(analysisData.completed_at)
+            : Number.NaN;
+          const persisted = setLastCompletedAnalysis({
+            analysisId: id,
+            profileId: analysisData.profile_id,
+            completedAt: Number.isFinite(parsedCompletedAt) ? parsedCompletedAt : Date.now(),
+            faceShapeCategory: visagismData.face_shape_category,
+            primaryHairstyle: visagismData.primary_hairstyle,
+            confidenceScore: analysisData.confidence_score,
+          });
+          setLastCompleted(persisted);
+        }
+
+        setStep("result");
+        logRecovery("VISAGISM_RESULT_RECOVERY", {
+          analysis_id: id,
+          source,
+          status: "completed",
+        });
+        return true;
+      } catch (error) {
+        clearActiveAnalysis();
+        showRecoveryError(error);
+        return false;
+      }
+    },
+    [showRecoveryError]
+  );
+
+  const recoverAnalysis = useCallback(
+    async (id: string, source: Exclude<RecoverySource, "polling_completion">) => {
+      setAnalysisId(id);
+      setErrorMessage("");
+      setStep("processing");
+
+      try {
+        const response = await analysisApi.get(id);
+        const status = response.data?.data?.status as string | undefined;
+
+        if (status === "completed") {
+          await loadResult(id, source);
+          return;
+        }
+
+        if (status === "failed") {
+          clearActiveAnalysis();
+          setAnalysisId(null);
+          setErrorMessage(
+            (response.data?.data?.error_message as string | undefined) ||
+              "A análise não foi concluída. Tente novamente com outras fotos."
+          );
+          setStep("error");
+          return;
+        }
+
+        if (status === "processing" || status === "queued" || status === "pending") {
+          setActiveAnalysis(id);
+          logRecovery("VISAGISM_POLL_RECOVERED", {
+            analysis_id: id,
+            source,
+            status,
+          });
+          return;
+        }
+
+        clearActiveAnalysis();
+        setAnalysisId(null);
+        setErrorMessage("O servidor retornou um estado de análise que não reconhecemos.");
+        setStep("error");
+      } catch (error) {
+        clearActiveAnalysis();
+        showRecoveryError(error);
+      }
+    },
+    [loadResult, showRecoveryError]
+  );
+
+  useEffect(() => {
+    setLastCompleted(getLastCompletedAnalysis());
+
+    const url = new URL(window.location.href);
+    const urlAnalysisId = url.searchParams.get("analysisId");
+    if (urlAnalysisId) {
+      void recoverAnalysis(urlAnalysisId, "url");
+      return;
+    }
+
+    const active = getActiveAnalysis();
+    if (active) {
+      setAnalysisId(active.analysisId);
+      setStep("processing");
+      logRecovery("VISAGISM_POLL_RECOVERED", {
+        analysis_id: active.analysisId,
+        source: "local_storage",
+        status: "resume",
+      });
+    }
+  }, [recoverAnalysis]);
 
   useEffect(() => {
     let active = true;
@@ -144,6 +300,59 @@ export default function VisagismPage() {
   }, []);
 
   useEffect(() => {
+    if (step !== "landing" || !selectedProfileId) return;
+
+    let active = true;
+    setIsLoadingHistory(true);
+
+    const loadHistory = async () => {
+      try {
+        const response = await analysisApi.list({ profile_id: selectedProfileId });
+        const analyses = ((response.data?.data || []) as Analysis[])
+          .filter((analysis) => analysis.status === "completed")
+          .sort(
+            (a, b) =>
+              new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          )
+          .slice(0, 5);
+
+        const summaries = await Promise.all(
+          analyses.map(async (analysis): Promise<HistoryItem> => {
+            try {
+              const visagismResponse = await analysisApi.getVisagism(analysis.id);
+              const visagism = (visagismResponse.data?.data || {}) as VisagismResult;
+              return {
+                id: analysis.id,
+                createdAt: analysis.created_at,
+                confidenceScore: analysis.confidence_score,
+                faceShapeCategory: visagism.face_shape_category,
+                primaryHairstyle: visagism.primary_hairstyle,
+              };
+            } catch {
+              return {
+                id: analysis.id,
+                createdAt: analysis.created_at,
+                confidenceScore: analysis.confidence_score,
+              };
+            }
+          })
+        );
+
+        if (active) setHistory(summaries);
+      } catch {
+        if (active) setHistory([]);
+      } finally {
+        if (active) setIsLoadingHistory(false);
+      }
+    };
+
+    void loadHistory();
+    return () => {
+      active = false;
+    };
+  }, [selectedProfileId, step]);
+
+  useEffect(() => {
     if (step !== "processing" || !analysisId) return;
 
     let cancelled = false;
@@ -156,16 +365,12 @@ export default function VisagismPage() {
         const status = response.data?.data?.status as string | undefined;
 
         if (status === "completed") {
-          const visagism = await analysisApi.getVisagism(analysisId);
-          if (cancelled) return;
-          setResult((visagism.data?.data || {}) as VisagismResult);
-          clearPersistedAnalysis();
-          setStep("result");
+          await loadResult(analysisId, "polling_completion");
           return;
         }
 
         if (status === "failed") {
-          clearPersistedAnalysis();
+          clearActiveAnalysis();
           setAnalysisId(null);
           setErrorMessage(
             (response.data?.data?.error_message as string | undefined) ||
@@ -179,24 +384,24 @@ export default function VisagismPage() {
       } catch (error) {
         if (cancelled) return;
         if (getStatusCode(error) === 409) {
-          clearPersistedAnalysis();
+          clearActiveAnalysis();
           setAnalysisId(null);
           setErrorMessage(extractMessage(error));
           setStep("error");
           return;
         }
 
-        setErrorMessage(extractMessage(error));
-        setStep("error");
+        clearActiveAnalysis();
+        showRecoveryError(error);
       }
     };
 
-    poll();
+    void poll();
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [analysisId, step]);
+  }, [analysisId, loadResult, showRecoveryError, step]);
 
   const handlePhotoChange = (angle: VisagismPhotoAngle, file: File) => {
     setUploaded((current) => {
@@ -285,6 +490,7 @@ export default function VisagismPage() {
     if (!activePhotoshootId || !allTriaged) return;
     setIsSubmitting(true);
     setErrorMessage("");
+    replaceAnalysisIdInUrl(null);
 
     try {
       const analysisResponse = await analysisApi.start(activePhotoshootId, {
@@ -295,10 +501,7 @@ export default function VisagismPage() {
       const newAnalysisId = analysisResponse.data?.data?.analysis_id as string;
       if (!newAnalysisId) throw new Error("ID da análise não retornado pelo servidor.");
 
-      window.localStorage.setItem(
-        ACTIVE_ANALYSIS_STORAGE_KEY,
-        JSON.stringify({ analysisId: newAnalysisId, startedAt: Date.now() } satisfies PersistedAnalysis)
-      );
+      setActiveAnalysis(newAnalysisId);
       setAnalysisId(newAnalysisId);
       setStep("processing");
     } catch (error) {
@@ -309,14 +512,24 @@ export default function VisagismPage() {
   };
 
   const resetFlow = () => {
-    clearPersistedAnalysis();
+    clearActiveAnalysis();
+    replaceAnalysisIdInUrl(null);
     setStep("upload");
-    setPhotos(initialPhotos.map((p) => ({ ...p })));
+    setPhotos(initialPhotos.map((photo) => ({ ...photo })));
     setUploaded({});
     setActivePhotoshootId(null);
     setAnalysisId(null);
     setResult(null);
     setErrorMessage("");
+  };
+
+  const openLastCompleted = () => {
+    if (!lastCompleted) return;
+    void recoverAnalysis(lastCompleted.analysisId, "local_storage");
+  };
+
+  const openHistoryItem = (id: string) => {
+    void recoverAnalysis(id, "history");
   };
 
   if (step === "upload") {
@@ -433,6 +646,11 @@ export default function VisagismPage() {
     );
   }
 
+  const visibleLastCompleted =
+    lastCompleted && selectedProfileId && lastCompleted.profileId === selectedProfileId
+      ? lastCompleted
+      : null;
+
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col bg-background px-5 pb-8 pt-10">
       <div className="flex flex-1 flex-col justify-center">
@@ -465,10 +683,68 @@ export default function VisagismPage() {
         {!isLoadingProfiles && profiles.length === 0 ? (
           <p className="mt-2 text-sm text-destructive">É necessário ter um perfil cadastrado antes de iniciar.</p>
         ) : null}
+
+        {visibleLastCompleted ? (
+          <section className="mt-6 rounded-2xl border bg-card p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Última análise</p>
+            <p className="mt-2 text-sm font-medium">
+              {faceShapeLabel(visibleLastCompleted.faceShapeCategory)
+                ? `Rosto: ${faceShapeLabel(visibleLastCompleted.faceShapeCategory)}`
+                : "Análise concluída"}
+            </p>
+            {visibleLastCompleted.primaryHairstyle ? (
+              <p className="mt-1 text-sm text-muted-foreground">Corte: {visibleLastCompleted.primaryHairstyle}</p>
+            ) : null}
+            <p className="mt-1 text-xs text-muted-foreground">
+              {new Date(visibleLastCompleted.completedAt).toLocaleDateString("pt-BR")}
+            </p>
+            <Button variant="outline" className="mt-3 h-10 w-full" onClick={openLastCompleted}>
+              Ver última análise
+            </Button>
+          </section>
+        ) : null}
+
+        {selectedProfileId ? (
+          <section className="mt-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Análises anteriores</p>
+            {isLoadingHistory ? (
+              <p className="mt-3 text-sm text-muted-foreground">Carregando histórico...</p>
+            ) : history.length > 0 ? (
+              <div className="mt-3 space-y-2">
+                {history.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => openHistoryItem(item.id)}
+                    className="flex w-full items-center justify-between gap-3 rounded-xl border bg-card p-3 text-left transition-colors hover:bg-muted/30"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">
+                        {faceShapeLabel(item.faceShapeCategory)
+                          ? `Rosto ${faceShapeLabel(item.faceShapeCategory)}`
+                          : "Análise concluída"}
+                      </p>
+                      <p className="mt-1 truncate text-xs text-muted-foreground">
+                        {new Date(item.createdAt).toLocaleDateString("pt-BR")}
+                        {item.primaryHairstyle ? ` · ${item.primaryHairstyle}` : ""}
+                        {typeof item.confidenceScore === "number"
+                          ? ` · ${Math.round(item.confidenceScore * 100)}%`
+                          : ""}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-xs font-medium text-primary">Ver →</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-muted-foreground">Nenhuma análise concluída neste perfil ainda.</p>
+            )}
+          </section>
+        ) : null}
       </div>
 
       <div className="pt-8">
-        <Button className="h-12 w-full text-base" onClick={() => setStep("upload")} disabled={!selectedProfileId}>Começar agora</Button>
+        <Button className="h-12 w-full text-base" onClick={() => setStep("upload")} disabled={!selectedProfileId}>Começar nova análise</Button>
         <p className="mt-3 text-center text-xs text-muted-foreground">Fotos → triagem → análise → resultado</p>
       </div>
     </main>
