@@ -62,7 +62,12 @@ const SIMULATION_REASON_COPY: Record<string, string> = {
     "A prévia foi interrompida por uma proteção técnica e sua foto original foi mantida.",
   simulation_in_progress:
     "Esta prévia já está sendo gerada. Ela aparecerá aqui assim que estiver disponível.",
+  simulation_budget_exhausted:
+    "O limite temporário de gerações desta análise foi atingido para proteger o consumo. As prévias já salvas continuam disponíveis.",
 };
+
+const SIMULATION_POLL_INTERVAL_MS = 3000;
+const SIMULATION_POLL_MAX_ATTEMPTS = 40;
 
 function simulationMessage(reason: string | null) {
   if (!reason) return "A simulação foi bloqueada com segurança e a foto original foi preservada.";
@@ -94,6 +99,7 @@ export function VisagismResultView({ result, analysisId, onReset }: Props) {
   const [selectedHaircut, setSelectedHaircut] = useState<string | null>(primaryName);
   const [simulations, setSimulations] = useState<Record<string, SimulationPreflightResult>>({});
   const [simulationLoading, setSimulationLoading] = useState<string | null>(null);
+  const [simulationPolling, setSimulationPolling] = useState<string | null>(null);
   const [simulationError, setSimulationError] = useState("");
   const [selectedBarberBrief, setSelectedBarberBrief] = useState<BarberBrief | null>(
     interpretation?.barber_brief || null
@@ -129,7 +135,7 @@ export function VisagismResultView({ result, analysisId, onReset }: Props) {
   }, [analysisId]);
 
   useEffect(() => {
-    if (!analysisId || !selectedHaircut) return;
+    if (!analysisId || !selectedHaircut || simulationPolling) return;
     let active = true;
     const cachedBrief = simulations[selectedHaircut]?.barber_brief;
     if (cachedBrief) {
@@ -170,6 +176,37 @@ export function VisagismResultView({ result, analysisId, onReset }: Props) {
     }
   };
 
+  const pollForSimulation = async (haircutName: string) => {
+    if (!analysisId || simulationPolling) return;
+    setSimulationPolling(haircutName);
+    try {
+      for (let attempt = 0; attempt < SIMULATION_POLL_MAX_ATTEMPTS; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, SIMULATION_POLL_INTERVAL_MS));
+        const response = await analysisApi.listVisagismSimulations(analysisId);
+        const items = (response.data?.data || []) as SimulationPreflightResult[];
+        const ready = items.find(
+          (item) => item?.selected_haircut === haircutName && item.simulation_status === "ready"
+        );
+        if (ready) {
+          setSimulations((current) => ({ ...current, [haircutName]: ready }));
+          if (ready.barber_brief) setSelectedBarberBrief(ready.barber_brief);
+          setPreviewMode("simulation");
+          setSimulationError("");
+          return;
+        }
+      }
+      setSimulationError(
+        "A prévia continua processando no servidor. Você pode sair e reabrir esta análise mais tarde sem iniciar outra geração."
+      );
+    } catch {
+      setSimulationError(
+        "Não foi possível consultar a geração agora. Evite gerar novamente; reabra esta análise em alguns instantes."
+      );
+    } finally {
+      setSimulationPolling(null);
+    }
+  };
+
   const chooseHaircut = (haircutName: string) => {
     setSelectedHaircut(haircutName);
     setSimulationError("");
@@ -194,9 +231,7 @@ export function VisagismResultView({ result, analysisId, onReset }: Props) {
       if (data.simulation_status === "ready") {
         setPreviewMode("simulation");
       } else if (data.simulation_status === "processing") {
-        window.setTimeout(() => {
-          void refreshCachedSimulations();
-        }, 4000);
+        void pollForSimulation(selectedHaircut);
       } else {
         setPreviewMode("original");
       }
@@ -211,9 +246,16 @@ export function VisagismResultView({ result, analysisId, onReset }: Props) {
                 ""
             )
           : "";
-      setSimulationError(
-        message || "Não foi possível solicitar a simulação agora. Sua análise e foto original continuam preservadas."
-      );
+      if (!message && selectedHaircut) {
+        setSimulationError(
+          "A conexão caiu durante a geração. Estou consultando o resultado salvo sem repetir a solicitação paga."
+        );
+        void pollForSimulation(selectedHaircut);
+      } else {
+        setSimulationError(
+          message || "Não foi possível solicitar a simulação agora. Sua análise e foto original continuam preservadas."
+        );
+      }
     } finally {
       setSimulationLoading(null);
     }
@@ -324,10 +366,12 @@ export function VisagismResultView({ result, analysisId, onReset }: Props) {
                 variant="outline"
                 className="mt-3 h-12 w-full"
                 onClick={runSimulation}
-                disabled={simulationLoading !== null}
+                disabled={simulationLoading !== null || simulationPolling !== null}
               >
                 {simulationLoading === selectedHaircut
                   ? "Gerando prévia segura..."
+                  : simulationPolling === selectedHaircut
+                    ? "Finalizando prévia..."
                   : selectedSimulation?.simulation_status === "ready"
                     ? "Ver prévia salva"
                     : "Gerar prévia deste corte"}

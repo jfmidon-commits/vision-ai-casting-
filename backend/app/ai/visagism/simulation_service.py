@@ -72,9 +72,6 @@ class VisagismSimulationService:
                 "reference_identity_scores": [],
             }
 
-        # The original source photo itself is one of the 3-5 real identity
-        # references used by the mobile flow. Comparing an object to itself is
-        # deterministic and avoids a needless external identity call.
         scores = [
             1.0 if ref is original_photo else self.verifier.compare(original_photo, ref)
             for ref in real_reference_photos
@@ -104,6 +101,7 @@ class VisagismSimulationService:
         preferred_original: Optional[Any] = None,
         denoising: float = 0.30,
         identity_weight: float = 0.90,
+        preflight_result: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         if self.renderer is None:
             return self._blocked(
@@ -112,15 +110,19 @@ class VisagismSimulationService:
                 reason="inpaint_provider_not_configured",
             )
 
-        preflight = self.preflight(
-            original_photo=original_photo,
-            real_reference_photos=real_reference_photos,
+        preflight = (
+            dict(preflight_result)
+            if isinstance(preflight_result, dict)
+            else self.preflight(
+                original_photo=original_photo,
+                real_reference_photos=real_reference_photos,
+            )
         )
-        if not preflight["eligible"]:
+        if not preflight.get("eligible"):
             return self._blocked(
                 source_photos=source_photos,
                 preferred_original=preferred_original,
-                reason=preflight["reason"],
+                reason=str(preflight.get("reason") or "simulation_blocked"),
                 diagnostics={"preflight": preflight},
             )
 
@@ -138,6 +140,11 @@ class VisagismSimulationService:
                 edit_instruction=edit_instruction,
                 denoising=denoising,
                 identity_weight=identity_weight,
+                validated_mask_result=(
+                    preflight.get("mask")
+                    if isinstance(preflight.get("mask"), dict)
+                    else None
+                ),
             )
         except Exception as exc:
             reason = getattr(exc, "reason_code", "simulation_pipeline_error")

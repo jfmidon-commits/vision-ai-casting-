@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from PIL import Image
+from PIL import Image, ImageOps
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,14 +16,17 @@ from app.ai.visagism.barber_brief import build_barber_brief_for_haircut
 from app.ai.visagism.interpretation import build_visagism_interpretation
 from app.ai.visagism.prompt_builder import build_haircut_edit_instruction
 from app.ai.visagism.runtime import create_simulation_runtime
+from app.ai.visagism.simulation_budget import claim_simulation_budget
 from app.ai.visagism.simulation_cache import (
     cache_key,
     find_ready,
     object_key,
+    prompt_fingerprint,
     ready_for_source,
     with_ready_entry,
 )
 from app.ai.visagism.simulation_service import VisagismSimulationService
+from app.config import settings
 from app.database import get_db
 from app.middleware.auth import get_current_user
 from app.models import Analysis, Photo
@@ -34,6 +37,9 @@ from app.utils.logger import get_logger
 router = APIRouter(prefix="/api/v1/analyses", tags=["analyses"])
 logger = get_logger(__name__)
 
+SIMULATION_DENOISING = 0.30
+SIMULATION_IDENTITY_WEIGHT = 0.90
+
 
 class VisagismSimulationRequest(BaseModel):
     haircut_name: str = Field(..., min_length=1, max_length=200)
@@ -42,7 +48,8 @@ class VisagismSimulationRequest(BaseModel):
 def _read_pil_storage_image(url: str) -> Image.Image:
     raw = StorageService.read_object_from_url(url)
     with Image.open(io.BytesIO(raw)) as image:
-        return image.convert("RGB").copy()
+        normalized = ImageOps.exif_transpose(image)
+        return normalized.convert("RGB").copy()
 
 
 def _pil_to_png_bytes(image: Any) -> bytes:
@@ -319,6 +326,12 @@ async def simulate_visagism_haircut(
             detail="Haircut must belong to the grounded visagism recommendations",
         )
     barber_brief = build_barber_brief_for_haircut(visagism, request.haircut_name)
+    instruction = build_haircut_edit_instruction(request.haircut_name, visagism)
+    instruction_hash = prompt_fingerprint(
+        instruction,
+        denoising=SIMULATION_DENOISING,
+        identity_weight=SIMULATION_IDENTITY_WEIGHT,
+    )
 
     photo_result = await db.execute(
         select(Photo)
@@ -346,6 +359,7 @@ async def simulate_visagism_haircut(
         visagism,
         haircut_name=request.haircut_name,
         source_photo_id=source_photo_id,
+        prompt_hash=instruction_hash,
     )
     if cached_any:
         try:
@@ -444,6 +458,7 @@ async def simulate_visagism_haircut(
         source_photo_id=source_photo_id,
         provider=runtime.provider,
         model=runtime.model,
+        prompt_hash=instruction_hash,
     )
     lock_id = _advisory_lock_id(
         str(current_user.tenant_id), str(analysis_id), exact_key
@@ -472,6 +487,7 @@ async def simulate_visagism_haircut(
             source_photo_id=source_photo_id,
             provider=runtime.provider,
             model=runtime.model,
+            prompt_hash=instruction_hash,
         )
         if cached_exact:
             display_url = StorageService.get_presigned_url(
@@ -499,7 +515,52 @@ async def simulate_visagism_haircut(
             verifier=runtime.verifier,
             renderer=runtime.renderer,
         )
-        instruction = build_haircut_edit_instruction(request.haircut_name, visagism)
+        budget = await claim_simulation_budget(
+            analysis_id=analysis_id,
+            tenant_id=current_user.tenant_id,
+            max_attempts=settings.VISAGISM_SIMULATION_MAX_ATTEMPTS_PER_ANALYSIS,
+            window_seconds=settings.VISAGISM_SIMULATION_BUDGET_WINDOW_SECONDS,
+        )
+        if not budget.allowed:
+            logger.warning(
+                "Visagism simulation budget exhausted analysis=%s haircut=%s retry_after=%ss",
+                analysis_id,
+                request.haircut_name,
+                budget.retry_after_seconds,
+            )
+            return APIResponse(
+                data=_public_simulation_contract(
+                    analysis_id=analysis_id,
+                    haircut_name=request.haircut_name,
+                    original_url=original_url,
+                    reason=budget.reason or "simulation_budget_exhausted",
+                    provider_configured=True,
+                    reference_count=len(reference_images),
+                    barber_brief=barber_brief,
+                ),
+                message="Simulation budget exhausted",
+            )
+
+        preflight = await asyncio.to_thread(
+            service.preflight,
+            original_photo=original_image,
+            real_reference_photos=reference_images,
+        )
+        if not preflight.get("eligible"):
+            reason = str(preflight.get("reason") or "simulation_blocked")
+            return APIResponse(
+                data=_public_simulation_contract(
+                    analysis_id=analysis_id,
+                    haircut_name=request.haircut_name,
+                    original_url=original_url,
+                    reason=reason,
+                    provider_configured=True,
+                    reference_count=len(reference_images),
+                    barber_brief=barber_brief,
+                ),
+                message="Simulation blocked safely",
+            )
+
         service_result = await asyncio.to_thread(
             service.simulate,
             original_photo=original_image,
@@ -507,6 +568,9 @@ async def simulate_visagism_haircut(
             source_photos=source_images,
             preferred_original=original_image,
             edit_instruction=instruction,
+            denoising=SIMULATION_DENOISING,
+            identity_weight=SIMULATION_IDENTITY_WEIGHT,
+            preflight_result=preflight,
         )
 
         if service_result.get("simulation_status") != "ready":
@@ -548,13 +612,35 @@ async def simulate_visagism_haircut(
             if isinstance(service_result.get("mask"), dict)
             else {}
         )
-        analysis.visagism = with_ready_entry(
-            visagism,
+        locked_result = await db.execute(
+            select(Analysis)
+            .where(
+                and_(
+                    Analysis.id == analysis_id,
+                    Analysis.tenant_id == current_user.tenant_id,
+                )
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        locked_analysis = locked_result.scalar_one_or_none()
+        if locked_analysis is None:
+            raise HTTPException(status_code=404, detail="Analysis not found")
+        latest_visagism = (
+            dict(locked_analysis.visagism)
+            if isinstance(locked_analysis.visagism, dict)
+            else {}
+        )
+        locked_analysis.visagism = with_ready_entry(
+            latest_visagism,
             key=exact_key,
             haircut_name=request.haircut_name,
             source_photo_id=source_photo_id,
             provider=runtime.provider,
             model=runtime.model,
+            prompt_hash=instruction_hash,
+            denoising=SIMULATION_DENOISING,
+            identity_weight=SIMULATION_IDENTITY_WEIGHT,
             stored_object_key=stored_key,
             identity_score_min=min_score,
             mask_kind=mask_meta.get("kind"),

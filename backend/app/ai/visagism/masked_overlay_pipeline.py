@@ -5,7 +5,7 @@ verifies identity against real source photos, and fails closed to the original.
 """
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Protocol
+from typing import Any, Dict, List, Optional, Protocol
 
 from .identity_lock import DEFAULT_IDENTITY_LOCK, IdentityLockPolicy
 
@@ -46,6 +46,7 @@ class MaskedOverlayPipeline:
         edit_instruction: str,
         denoising: float = 0.30,
         identity_weight: float = 0.90,
+        validated_mask_result: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         if (
             not self.policy.min_reference_validations
@@ -58,7 +59,11 @@ class MaskedOverlayPipeline:
         if identity_weight < self.policy.min_identity_weight:
             return self._fallback(original_photo, "identity_weight_too_low")
 
-        mask_result = self.mask_adapter.build_hair_mask(original_photo)
+        mask_result = (
+            dict(validated_mask_result)
+            if isinstance(validated_mask_result, dict)
+            else self.mask_adapter.build_hair_mask(original_photo)
+        )
         if not mask_result.get("valid"):
             return self._fallback(
                 original_photo, mask_result.get("reason") or "hair_mask_failed"

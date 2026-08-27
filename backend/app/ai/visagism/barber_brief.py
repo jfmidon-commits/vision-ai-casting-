@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from .interpretation import _barber_guidance, _clean_text, _face_shape_label
 
@@ -10,7 +10,7 @@ from .interpretation import _barber_guidance, _clean_text, _face_shape_label
 def build_barber_brief_for_haircut(
     analysis: Dict[str, Any], haircut_name: str
 ) -> Optional[Dict[str, Any]]:
-    source = analysis if isinstance(analysis, dict) else {}
+    source: Dict[str, Any] = analysis if isinstance(analysis, dict) else {}
     hairstyles = [
         item.strip()
         for item in source.get("recommended_hairstyles", [])
@@ -19,19 +19,17 @@ def build_barber_brief_for_haircut(
     if haircut_name not in hairstyles:
         return None
 
-    measured = (
-        source.get("measured_data_used")
-        if isinstance(source.get("measured_data_used"), dict)
-        else {}
+    measured_value = source.get("measured_data_used")
+    current_hair_value = source.get("current_hair")
+    measured: Dict[str, Any] = (
+        dict(measured_value) if isinstance(measured_value, dict) else {}
     )
-    current_hair = (
-        source.get("current_hair")
-        if isinstance(source.get("current_hair"), dict)
-        else {}
+    current_hair: Dict[str, Any] = (
+        dict(current_hair_value) if isinstance(current_hair_value, dict) else {}
     )
     guidance = _barber_guidance(haircut_name, current_hair)
 
-    grounded_in = []
+    grounded_in: List[str] = []
     face_shape = _face_shape_label(
         _clean_text(measured.get("face_shape"))
         or _clean_text(source.get("face_shape_category"))

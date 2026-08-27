@@ -7,6 +7,7 @@ back to an unconfigured or heavyweight verifier silently.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any, Optional
 
 from app.config import settings
@@ -24,6 +25,11 @@ class SimulationRuntime:
     provider_configured: bool
     identity_provider: str
     identity_configured: bool
+
+
+@lru_cache(maxsize=1)
+def _cached_rekognition_verifier() -> AWSRekognitionIdentityVerifier:
+    return AWSRekognitionIdentityVerifier()
 
 
 def create_simulation_runtime() -> SimulationRuntime:
@@ -46,7 +52,7 @@ def create_simulation_runtime() -> SimulationRuntime:
         and settings.AWS_ACCESS_KEY_ID.strip()
         and settings.AWS_SECRET_ACCESS_KEY.strip()
     ):
-        verifier = AWSRekognitionIdentityVerifier()
+        verifier = _cached_rekognition_verifier()
 
     return SimulationRuntime(
         renderer=renderer,

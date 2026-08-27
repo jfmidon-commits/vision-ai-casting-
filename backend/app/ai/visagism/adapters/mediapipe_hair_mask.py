@@ -117,7 +117,10 @@ class MediaPipeHairBeardMaskAdapter:
         import cv2
 
         person = (person_probability >= self.person_threshold).astype(np.uint8) * 255
-        person = cv2.erode(person, np.ones((3, 3), dtype=np.uint8), iterations=1)
+        person = np.asarray(
+            cv2.erode(person, np.ones((3, 3), dtype=np.uint8), iterations=1),
+            dtype=np.uint8,
+        )
         mask = np.where((roi > 0) & (person > 0), 255, 0).astype(np.uint8)
 
         protected = np.zeros_like(mask)
@@ -264,7 +267,9 @@ class MediaPipeHairBeardMaskAdapter:
         import cv2
 
         if len(points) >= 3:
-            cv2.fillPoly(mask, [points.astype(np.int32)], value)
+            cv2.fillPoly(  # type: ignore[call-overload]
+                mask, [points.astype(np.int32)], value
+            )
 
     @staticmethod
     def _invalid(reason: str, height: int, width: int) -> Dict[str, Any]:
