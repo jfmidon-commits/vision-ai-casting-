@@ -26,6 +26,8 @@ services:
         value: fal
       - key: VISAGISM_SIMULATION_MODEL
         value: fal-ai/flux-general/inpainting
+      - key: VISAGISM_SIMULATION_MAX_PIXELS
+        value: "1048576"
       - key: VISAGISM_IDENTITY_PROVIDER
         value: aws_rekognition
       - key: FAL_KEY
