@@ -129,7 +129,7 @@ export interface VisagismAlternativeRecommendation {
 }
 
 export interface VisagismInterpretation {
-  status: "ready" | "insufficient_grounded_data";
+  status: "ready" | "partial_grounded" | "service_limited" | "insufficient_grounded_data";
   executive_summary: string;
   current_hair_assessment: {
     summary: string;

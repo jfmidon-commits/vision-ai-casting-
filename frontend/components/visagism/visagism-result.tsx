@@ -261,6 +261,32 @@ export function VisagismResultView({ result, analysisId, onReset }: Props) {
     }
   };
 
+
+if (interpretation?.status === "service_limited") {
+  return (
+    <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col bg-background px-4 pb-8 pt-6">
+      <p className="text-sm font-medium text-muted-foreground">Resultado</p>
+      <h1 className="mt-1 text-2xl font-semibold">Interpretação avançada indisponível</h1>
+      <p className="mt-4 text-sm leading-6 text-muted-foreground">
+        As medições desta sessão foram preservadas, mas não havia dados suficientes para diferenciar cinco recomendações sem recorrer a uma lista genérica.
+      </p>
+      {interpretation.current_hair_assessment.attention_points.length ? (
+        <div className="mt-6 rounded-2xl border bg-card p-4">
+          <h2 className="font-semibold">O que foi possível confirmar</h2>
+          <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+            {interpretation.current_hair_assessment.attention_points.map((item) => (
+              <li key={item}>• {item}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      <Button className="mt-auto h-12 w-full" onClick={onReset}>
+        Fazer nova análise
+      </Button>
+    </main>
+  );
+}
+
   if (interpretation?.status === "insufficient_grounded_data") {
     return (
       <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col bg-background px-4 pb-8 pt-6">
@@ -290,7 +316,12 @@ export function VisagismResultView({ result, analysisId, onReset }: Props) {
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col bg-background px-4 pb-8 pt-6">
       <p className="text-sm font-medium text-muted-foreground">Resultado</p>
-      <h1 className="mt-1 text-2xl font-semibold">Sua análise foi concluída</h1>
+
+<h1 className="mt-1 text-2xl font-semibold">
+  {interpretation?.status === "partial_grounded"
+    ? "Análise parcial com dados confirmados"
+    : "Sua análise foi concluída"}
+</h1>
       {interpretation?.executive_summary ? (
         <p className="mt-3 text-sm leading-6 text-muted-foreground">{interpretation.executive_summary}</p>
       ) : null}
