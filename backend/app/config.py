@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     VISAGISM_SIMULATION_PROVIDER: str = "disabled"
     VISAGISM_SIMULATION_MODEL: str = "fal-ai/flux-general/inpainting"
     VISAGISM_SIMULATION_TIMEOUT_SECONDS: int = 120
+    VISAGISM_SIMULATION_MAX_PIXELS: int = 1_048_576
     VISAGISM_IDENTITY_PROVIDER: str = "disabled"
     FAL_KEY: str = ""
 
