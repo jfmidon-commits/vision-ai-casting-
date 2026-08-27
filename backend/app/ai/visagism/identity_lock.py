@@ -1,13 +1,8 @@
-"""Fail-closed identity lock for visagism simulations.
+"""Fail-closed identity lock for haircut simulations.
 
-Golden rule: NEVER regenerate the person. The original photo is the immutable
-base layer. Only hair and beard overlays may be changed. Face, body, clothing
-and background remain untouched. If any identity validation is missing or
-fails, the system MUST publish the original photo plus the technical spec.
-
-This module does not invent masks, embeddings, scores, or image edits.
-Production adapters must provide real segmentation/inpainting and real identity
-similarity values (e.g. MediaPipe/InsightFace/RetinaFace + ArcFace/InsightFace).
+Golden rule: NEVER regenerate the person. The original photo is immutable.
+Only a validated hair overlay may change. Face, beard, body, clothing and
+background remain untouched. Any missing validation publishes the original.
 """
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional
@@ -23,7 +18,6 @@ class IdentityLockPolicy:
     max_reference_validations: int = 5
 
     def generation_constraints(self) -> Dict[str, Any]:
-        """Contract that every renderer must obey before generation starts."""
         return {
             "never_generate_person_from_scratch": True,
             "init_image_required": True,
@@ -33,10 +27,11 @@ class IdentityLockPolicy:
             "base_image_immutable": True,
             "card_layers": {
                 "layer_1": "original_photo_immutable",
-                "layer_2": "optional_hair_beard_overlay_only",
+                "layer_2": "optional_hair_overlay_only",
             },
-            "editable_regions": ["hair", "beard"],
+            "editable_regions": ["hair"],
             "forbidden_regions": [
+                "beard",
                 "eyes",
                 "eyebrows",
                 "nose",
@@ -54,7 +49,7 @@ class IdentityLockPolicy:
                 "background",
             ],
             "mask_required": True,
-            "mask_scope": "hair_and_beard_only",
+            "mask_scope": "hair_only",
             "denoising_range": [self.min_denoising, self.max_denoising],
             "identity_lock_required": True,
             "identity_weight_min": self.min_identity_weight,
@@ -98,7 +93,6 @@ class IdentityLockPolicy:
         protected_regions_unchanged: bool = False,
         body_unchanged: bool = False,
     ) -> Dict[str, Any]:
-        """Allow simulation only when EVERY protection and identity check passes."""
         validation = self._validate_reference_scores(identity_scores)
         publish_simulation = bool(
             simulated_photo is not None
@@ -121,7 +115,7 @@ class IdentityLockPolicy:
         if publish_simulation:
             return {
                 "image": simulated_photo,
-                "mode": "hair_beard_overlay",
+                "mode": "hair_overlay",
                 "simulationApplied": True,
                 "identityVerified": True,
                 "identityScores": validation["scores"],
@@ -132,7 +126,6 @@ class IdentityLockPolicy:
                 "audit": audit_event,
             }
 
-        # Explicit fail-closed fallback. Never publish a merely similar person.
         return {
             "image": original_photo,
             "mode": "original_plus_spec",
