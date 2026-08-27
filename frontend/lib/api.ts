@@ -12,6 +12,8 @@ const api = axios.create({
 
 const MAX_GET_RETRIES = 12;
 const RETRY_DELAYS = [2000, 3000, 5000, 8000, 13000];
+const AUTH_TIMEOUT_MS = 60000;
+const UPLOAD_TIMEOUT_MS = 120000;
 
 type RetryConfig = {
   __retryCount?: number;
@@ -67,7 +69,7 @@ async function refreshAccessToken(): Promise<TokenResponse | null> {
       .post<TokenResponse>(
         `${apiBaseUrl}/api/v1/auth/refresh`,
         { refresh_token: storedRefreshToken },
-        { timeout: 30000 }
+        { timeout: AUTH_TIMEOUT_MS }
       )
       .then((response) => {
         const accessToken = response.data?.access_token;
@@ -193,14 +195,22 @@ export default api;
 
 export const authApi = {
   login: (email: string, password: string) =>
-    api.post("/api/v1/auth/login", { email, password }, operationConfig("login")),
+    api.post(
+      "/api/v1/auth/login",
+      { email, password },
+      operationConfig("login", { timeout: AUTH_TIMEOUT_MS })
+    ),
   register: (data: any) =>
-    api.post("/api/v1/auth/register", data, operationConfig("cadastro")),
+    api.post(
+      "/api/v1/auth/register",
+      data,
+      operationConfig("cadastro", { timeout: AUTH_TIMEOUT_MS })
+    ),
   refresh: (refreshToken: string) =>
     api.post(
       "/api/v1/auth/refresh",
       { refresh_token: refreshToken },
-      operationConfig("renovar sessão")
+      operationConfig("renovar sessão", { timeout: AUTH_TIMEOUT_MS })
     ),
   me: () => api.get("/api/v1/auth/me", operationConfig("validar sessão")),
 };
@@ -243,7 +253,7 @@ export const photoshootApi = {
       formData,
       operationConfig(`upload da foto ${angle}`, {
         params: { angle },
-        timeout: 60000,
+        timeout: UPLOAD_TIMEOUT_MS,
       })
     );
   },

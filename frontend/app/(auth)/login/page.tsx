@@ -40,6 +40,12 @@ export default function LoginPage() {
     );
   };
 
+  const getErrorMessage = (err: any, fallback: string) =>
+    err?.response?.data?.detail ||
+    err?.response?.data?.message ||
+    err?.message ||
+    fallback;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
@@ -52,7 +58,7 @@ export default function LoginPage() {
       persistSession(access_token, refresh_token);
       router.push("/dashboard");
     } catch (err: any) {
-      setError(err.response?.data?.detail || "Erro ao fazer login");
+      setError(getErrorMessage(err, "Erro ao fazer login"));
     } finally {
       setLoading(false);
     }
@@ -71,7 +77,7 @@ export default function LoginPage() {
       persistSession(access_token, refresh_token);
       router.push("/dashboard");
     } catch (err: any) {
-      setError(err.response?.data?.detail || "Não foi possível criar a conta");
+      setError(getErrorMessage(err, "Não foi possível criar a conta"));
     } finally {
       setRegistering(false);
     }
