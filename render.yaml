@@ -22,6 +22,14 @@ services:
         generateValue: true
       - key: OPENAI_API_KEY
         sync: false
+      - key: VISAGISM_SIMULATION_PROVIDER
+        value: fal
+      - key: VISAGISM_SIMULATION_MODEL
+        value: fal-ai/flux-general/inpainting
+      - key: VISAGISM_IDENTITY_PROVIDER
+        value: aws_rekognition
+      - key: FAL_KEY
+        sync: false
       - key: AWS_ACCESS_KEY_ID
         sync: false
       - key: AWS_SECRET_ACCESS_KEY
