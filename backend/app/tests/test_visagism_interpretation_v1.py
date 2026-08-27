@@ -58,12 +58,14 @@ def test_interpretation_never_fills_missing_measurements():
 
 
 def test_interpretation_insufficient_data_has_no_primary():
-    result = build_visagism_interpretation({
-        "recommended_hairstyles": [],
-        "primary_hairstyle": None,
-        "confidence": 0.0,
-        "limitations": ["no_grounded_hairstyles"],
-    })
+    result = build_visagism_interpretation(
+        {
+            "recommended_hairstyles": [],
+            "primary_hairstyle": None,
+            "confidence": 0.0,
+            "limitations": ["no_grounded_hairstyles"],
+        }
+    )
 
     assert result["status"] == "insufficient_grounded_data"
     assert result["primary_recommendation"] is None
@@ -72,22 +74,29 @@ def test_interpretation_insufficient_data_has_no_primary():
 
 
 def test_primary_not_in_grounded_list_is_not_preserved():
-    result = build_visagism_interpretation({
-        "recommended_hairstyles": ["A", "B"],
-        "primary_hairstyle": "Inventado",
-        "confidence": 0.8,
-        "measured_data_used": {"face_shape": "oval"},
-    })
+    result = build_visagism_interpretation(
+        {
+            "recommended_hairstyles": ["A", "B"],
+            "primary_hairstyle": "Inventado",
+            "confidence": 0.8,
+            "measured_data_used": {"face_shape": "oval"},
+        }
+    )
 
     assert result["primary_recommendation"]["name"] == "A"
     assert result["primary_recommendation"]["name"] != "Inventado"
 
 
 def test_limitations_are_human_readable_not_raw_codes():
-    result = build_visagism_interpretation({
-        "recommended_hairstyles": [],
-        "limitations": ["facial_result_is_mock", "fewer_than_5_grounded_hairstyles:2"],
-    })
+    result = build_visagism_interpretation(
+        {
+            "recommended_hairstyles": [],
+            "limitations": [
+                "facial_result_is_mock",
+                "fewer_than_5_grounded_hairstyles:2",
+            ],
+        }
+    )
 
     combined = " ".join(result["limitations"])
     assert "facial_result_is_mock" not in combined
@@ -117,7 +126,10 @@ def test_rule_based_result_translates_round_and_marks_partial_fallback():
             "hairline": "não medido",
         },
         "confidence": 0.55,
-        "limitations": ["hairline_not_measured", "llm_unavailable_rule_based_recommendations"],
+        "limitations": [
+            "hairline_not_measured",
+            "llm_unavailable_rule_based_recommendations",
+        ],
         "data_source": {
             "measured": True,
             "llm_interpretation": False,
@@ -137,14 +149,16 @@ def test_rule_based_result_translates_round_and_marks_partial_fallback():
 
 
 def test_rule_based_barber_brief_is_actionable_without_inventing_measurements():
-    result = build_visagism_interpretation({
-        "recommended_hairstyles": ["Quiff texturizado"],
-        "primary_hairstyle": "Quiff texturizado",
-        "measured_data_used": {"face_shape": "round", "hair_density": "média"},
-        "current_hair": {"density": "média"},
-        "confidence": 0.55,
-        "data_source": {"rule_based_interpretation": True},
-    })
+    result = build_visagism_interpretation(
+        {
+            "recommended_hairstyles": ["Quiff texturizado"],
+            "primary_hairstyle": "Quiff texturizado",
+            "measured_data_used": {"face_shape": "round", "hair_density": "média"},
+            "current_hair": {"density": "média"},
+            "confidence": 0.55,
+            "data_source": {"rule_based_interpretation": True},
+        }
+    )
 
     brief = result["barber_brief"]
     assert "volume" in brief["top"].lower()
