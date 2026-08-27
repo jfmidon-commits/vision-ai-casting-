@@ -79,17 +79,36 @@ export interface VisagismCardMedia {
   simulationApplied: boolean;
   identityVerified: boolean;
   fallbackUsed?: boolean;
-  displayMode?: "original" | "validated_hair_beard_overlay" | "original_plus_spec";
+  displayMode?:
+    | "original"
+    | "validated_hair_overlay"
+    | "validated_hair_beard_overlay"
+    | "original_plus_spec";
+}
+
+export interface BarberBrief {
+  recommendation_name: string | null;
+  grounded_in: string[];
+  top: string;
+  sides: string;
+  back: string;
+  fringe: string;
+  texture: string;
+  finish: string;
+  avoid: string;
+  note: string;
 }
 
 export interface SimulationPreflightResult {
   analysis_id: string;
   selected_haircut: string;
-  simulation_status: "blocked";
-  reason: string;
-  provider_configured: false;
-  ready_enabled: false;
+  simulation_status: "ready" | "blocked" | "processing";
+  reason: string | null;
+  provider_configured: boolean;
+  ready_enabled: boolean;
   reference_count: number;
+  cached: boolean;
+  barber_brief?: BarberBrief | null;
   card_media: VisagismCardMedia;
 }
 
@@ -107,19 +126,6 @@ export interface VisagismAlternativeRecommendation {
   why_it_works: string;
   best_use_case: string;
   maintenance_level: "baixo" | "médio" | "alto" | "não determinado" | string;
-}
-
-export interface BarberBrief {
-  recommendation_name: string | null;
-  grounded_in: string[];
-  top: string;
-  sides: string;
-  back: string;
-  fringe: string;
-  texture: string;
-  finish: string;
-  avoid: string;
-  note: string;
 }
 
 export interface VisagismInterpretation {
