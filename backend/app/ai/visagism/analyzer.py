@@ -129,7 +129,7 @@ class VisagismAnalyzer:
     def __init__(self):
         self.client = openai.AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
-    async def analyze(self, photos: List[Dict], context: Dict = None) -> Dict:
+    async def analyze(self, photos: List[Dict], context: Optional[Dict] = None) -> Dict:
         """Entry point. Aceita context com parallel_results dos motores reais."""
         photo = photos[0] if photos else None
         if not photo:
@@ -137,7 +137,7 @@ class VisagismAnalyzer:
 
         return await self.analyze_single(photo, context=context or {})
 
-    async def analyze_single(self, photo: Dict, context: Dict = None) -> Dict:
+    async def analyze_single(self, photo: Dict, context: Optional[Dict] = None) -> Dict:
         context = context or {}
         parallel = context.get("parallel_results") or {}
         triage = context.get("triage_results") or []
@@ -491,7 +491,10 @@ FORMATO JSON OBRIGATÓRIO:
         return result
 
     def _fallback_response(
-        self, error_msg: str, measured: Dict = None, limitations: List = None
+        self,
+        error_msg: str,
+        measured: Optional[Dict] = None,
+        limitations: Optional[List] = None,
     ) -> Dict:
         measured = measured or {}
         limitations = list(limitations or [])
