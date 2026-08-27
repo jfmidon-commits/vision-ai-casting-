@@ -1,17 +1,19 @@
 from app.ai.visagism.identity_lock import IdentityLockPolicy
 
 
-def test_identity_lock_defaults_are_strict():
+def test_identity_lock_defaults_are_strict_and_hair_only():
     constraints = IdentityLockPolicy().generation_constraints()
     assert constraints["never_generate_person_from_scratch"] is True
     assert constraints["base_image_immutable"] is True
-    assert constraints["editable_regions"] == ["hair", "beard"]
-    assert constraints["mask_scope"] == "hair_and_beard_only"
+    assert constraints["editable_regions"] == ["hair"]
+    assert constraints["mask_scope"] == "hair_only"
     assert constraints["identity_weight_min"] >= 0.85
     assert constraints["identity_threshold"] >= 0.80
     assert constraints["all_reference_validations_must_pass"] is True
     assert constraints["publish_similar_face_forbidden"] is True
+    assert "beard" in constraints["forbidden_regions"]
     assert "body" in constraints["forbidden_regions"]
+    assert "background" in constraints["forbidden_regions"]
 
 
 def test_explicit_fallback_when_any_identity_score_is_low():
@@ -76,18 +78,18 @@ def test_blocks_when_mask_face_or_body_protection_fails():
         assert result["image"] == "original.jpg"
 
 
-def test_allows_only_hair_beard_overlay_after_every_validation_passes():
+def test_allows_only_hair_overlay_after_every_validation_passes():
     result = IdentityLockPolicy().decide_publication(
         original_photo="original.jpg",
-        simulated_photo="hair-beard-overlay.png",
+        simulated_photo="hair-overlay.png",
         identity_scores=[0.91, 0.93, 0.90, 0.92, 0.94],
         mask_valid=True,
         protected_regions_unchanged=True,
         body_unchanged=True,
     )
-    assert result["mode"] == "hair_beard_overlay"
+    assert result["mode"] == "hair_overlay"
     assert result["simulationApplied"] is True
     assert result["identityVerified"] is True
     assert result["layers"]["base"] == "original.jpg"
-    assert result["layers"]["overlay"] == "hair-beard-overlay.png"
+    assert result["layers"]["overlay"] == "hair-overlay.png"
     assert result["audit"]["simulation_allowed"] is True
