@@ -17,7 +17,13 @@ _LIMITATION_COPY = {
     "colorimetry_analyzer_not_available": "A colorimetria não pôde ser confirmada nesta sessão.",
     "photogenic_analyzer_not_available": "A qualidade fotográfica não pôde ser confirmada nesta sessão.",
     "expressions_analyzer_not_available": "A análise de expressão não pôde ser confirmada nesta sessão.",
+    "hair_density_not_measured": "A densidade do cabelo não pôde ser medida com confiança suficiente.",
+    "hairline_not_measured": "A linha frontal do cabelo não pôde ser confirmada com confiança suficiente.",
+    "face_shape_not_measured": "O formato facial não pôde ser confirmado com dados medidos nesta sessão.",
     "no_grounded_hairstyles": "Não houve dados suficientes para recomendar um corte com segurança.",
+    "llm_unavailable": "O serviço de interpretação avançada estava temporariamente indisponível.",
+    "llm_unavailable_rule_based_recommendations": "A interpretação avançada estava indisponível; as opções abaixo foram geradas por regras conservadoras usando apenas medições confirmadas.",
+    "fallback_no_grounded_face_shape": "Sem formato facial medido, o sistema não gerou recomendações de contingência.",
 }
 
 
@@ -46,8 +52,8 @@ def _translate_limitation(code: Any) -> str:
         return "Foram encontradas menos de cinco recomendações com base suficiente nesta sessão."
     if raw == "primary_hairstyle_not_in_recommendations":
         return "A recomendação principal foi ajustada para uma opção presente na lista validada."
-    if raw.startswith("Erro:"):
-        return "Parte da análise encontrou uma limitação técnica e foi mantida em modo conservador."
+    if raw.lower().startswith("error:"):
+        return "O serviço de interpretação encontrou uma limitação técnica nesta sessão."
     return "Uma parte da análise não pôde ser confirmada com segurança."
 
 
@@ -97,11 +103,11 @@ def build_visagism_interpretation(analysis: Dict[str, Any]) -> Dict[str, Any]:
     primary_justification = _clean_text(source.get("primary_justification"))
 
     attention_points = list(limitations)
-    if not hair_density:
+    if not hair_density and "A densidade do cabelo não pôde ser medida com confiança suficiente." not in attention_points:
         attention_points.append("A densidade do cabelo não pôde ser medida com confiança suficiente.")
-    if not hairline:
+    if not hairline and "A linha frontal do cabelo não pôde ser confirmada com confiança suficiente." not in attention_points:
         attention_points.append("A linha frontal do cabelo não pôde ser confirmada com confiança suficiente.")
-    if not face_shape:
+    if not face_shape and "O formato facial não pôde ser confirmado com dados medidos nesta sessão." not in attention_points:
         attention_points.append("O formato facial não pôde ser confirmado com dados medidos nesta sessão.")
 
     measured_labels: List[str] = []

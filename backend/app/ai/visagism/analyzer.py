@@ -15,6 +15,115 @@ import openai
 from app.config import settings
 
 
+_FALLBACK_HAIRSTYLES = {
+    "round": [
+        "Quiff texturizado",
+        "Side Part com volume no topo",
+        "Pompadour moderado",
+        "Undercut com topo alongado",
+        "Crew Cut com laterais mais baixas",
+    ],
+    "redondo": [
+        "Quiff texturizado",
+        "Side Part com volume no topo",
+        "Pompadour moderado",
+        "Undercut com topo alongado",
+        "Crew Cut com laterais mais baixas",
+    ],
+    "oval": [
+        "Side Part clássico",
+        "Quiff texturizado",
+        "French Crop",
+        "Slick Back",
+        "Crew Cut",
+    ],
+    "ovalado": [
+        "Side Part clássico",
+        "Quiff texturizado",
+        "French Crop",
+        "Slick Back",
+        "Crew Cut",
+    ],
+    "square": [
+        "Crew Cut",
+        "Side Part clássico",
+        "Textured Crop",
+        "Slick Back curto",
+        "Quiff com fade discreto",
+    ],
+    "quadrado": [
+        "Crew Cut",
+        "Side Part clássico",
+        "Textured Crop",
+        "Slick Back curto",
+        "Quiff com fade discreto",
+    ],
+    "heart": [
+        "Franja lateral texturizada",
+        "Textured Crop",
+        "Quiff moderado",
+        "Taper clássico",
+        "Camadas médias com movimento",
+    ],
+    "coracao": [
+        "Franja lateral texturizada",
+        "Textured Crop",
+        "Quiff moderado",
+        "Taper clássico",
+        "Camadas médias com movimento",
+    ],
+    "coração": [
+        "Franja lateral texturizada",
+        "Textured Crop",
+        "Quiff moderado",
+        "Taper clássico",
+        "Camadas médias com movimento",
+    ],
+    "diamond": [
+        "Franja texturizada",
+        "Side Part",
+        "Quiff moderado",
+        "Camadas médias",
+        "Taper com volume controlado",
+    ],
+    "diamante": [
+        "Franja texturizada",
+        "Side Part",
+        "Quiff moderado",
+        "Camadas médias",
+        "Taper com volume controlado",
+    ],
+    "oblong": [
+        "Textured Crop",
+        "French Crop",
+        "Side Part com pouco volume",
+        "Franja dividida",
+        "Taper clássico",
+    ],
+    "oblongo": [
+        "Textured Crop",
+        "French Crop",
+        "Side Part com pouco volume",
+        "Franja dividida",
+        "Taper clássico",
+    ],
+    "triangular": [
+        "Quiff texturizado",
+        "Side Part",
+        "Pompadour moderado",
+        "Brushed Back",
+        "Taper com volume no topo",
+    ],
+    "triangle": [
+        "Quiff texturizado",
+        "Side Part",
+        "Pompadour moderado",
+        "Brushed Back",
+        "Taper com volume no topo",
+    ],
+}
+
+
 class VisagismAnalyzer:
     def __init__(self):
         self.client = openai.AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
@@ -133,17 +242,28 @@ class VisagismAnalyzer:
             dims = grooming.get("dimensions") or {}
             hair = dims.get("hair") or grooming.get("hair") or {}
             if isinstance(hair, dict):
+                coverage = hair.get("coverage_score")
+                if coverage is None:
+                    coverage = hair.get("coverage")
+                volume = hair.get("volume_score")
+                if volume is None:
+                    volume = hair.get("volume")
+                texture = hair.get("texture_score")
+                if texture is None:
+                    texture = hair.get("texture")
+                neatness = hair.get("neatness_score")
+                if neatness is None:
+                    neatness = hair.get("neatness")
+
                 measured["hair_current"] = {
-                    "coverage_score": hair.get("coverage_score"),
-                    "volume_score": hair.get("volume_score"),
-                    "texture_score": hair.get("texture_score"),
-                    "neatness_score": hair.get("neatness_score"),
+                    "coverage_score": coverage,
+                    "volume_score": volume,
+                    "texture_score": texture,
+                    "neatness_score": neatness,
                     "overall_score": hair.get("overall_score"),
                 }
-                if hair.get("coverage_score") is not None:
-                    measured["hair_density"] = self._derive_density_label(
-                        hair.get("coverage_score")
-                    )
+                if coverage is not None:
+                    measured["hair_density"] = self._derive_density_label(coverage)
                 else:
                     measured["_limitations"].append("hair_density_not_measured")
             else:
@@ -196,6 +316,11 @@ class VisagismAnalyzer:
         if coverage_score >= 0.45:
             return "média"
         return "baixa"
+
+    def _rule_based_hairstyles(self, face_shape: Any) -> List[str]:
+        if not isinstance(face_shape, str):
+            return []
+        return list(_FALLBACK_HAIRSTYLES.get(face_shape.strip().lower(), []))
 
     def _build_grounded_prompt(
         self, measured: Dict[str, Any], limitations: List[str]
@@ -368,26 +493,64 @@ FORMATO JSON OBRIGATÓRIO:
         self, error_msg: str, measured: Dict = None, limitations: List = None
     ) -> Dict:
         measured = measured or {}
-        limitations = limitations or ["analyzer_error"]
+        limitations = list(limitations or [])
+        face_shape = measured.get("face_shape")
+        hairstyles = self._rule_based_hairstyles(face_shape)
+        primary = hairstyles[0] if hairstyles else None
+        density = measured.get("hair_density")
+        hairline = measured.get("hairline")
+
+        if hairstyles:
+            limitations.append("llm_unavailable_rule_based_recommendations")
+        else:
+            limitations.append("llm_unavailable")
+            limitations.append("fallback_no_grounded_face_shape")
+
+        hair_summary_parts = []
+        if density:
+            hair_summary_parts.append(f"densidade {density}")
+        if hairline:
+            hair_summary_parts.append("linha frontal detectada")
+        current_hair_summary = (
+            "Cabelo atual com " + " e ".join(hair_summary_parts) + "."
+            if hair_summary_parts
+            else "Avaliação capilar parcial; algumas medidas não foram confirmadas."
+        )
+
+        primary_justification = None
+        if primary and face_shape:
+            primary_justification = (
+                f"Fallback determinístico baseado no formato facial {face_shape} medido nesta sessão. "
+                "A escolha final deve considerar densidade, linha frontal e preferência pessoal quando esses dados estiverem disponíveis."
+            )
+
         return {
-            "face_shape_category": measured.get("face_shape") or "desconhecido",
-            "face_shape_description": "Análise indisponível no momento.",
-            "recommended_hairstyles": [],
-            "primary_hairstyle": None,
-            "primary_justification": None,
+            "face_shape_category": face_shape or "desconhecido",
+            "face_shape_description": (
+                f"Formato facial {face_shape} medido pelos analisadores locais."
+                if face_shape
+                else "Formato facial não confirmado nesta sessão."
+            ),
+            "recommended_hairstyles": hairstyles,
+            "primary_hairstyle": primary,
+            "primary_justification": primary_justification,
             "current_hair": {
-                "summary": "Não foi possível medir o cabelo atual.",
-                "density": measured.get("hair_density") or "não medido",
-                "hairline": "não medido",
+                "summary": current_hair_summary,
+                "density": density or "não medido",
+                "hairline": "detectado" if hairline else "não medido",
             },
             "measured_data_used": {
-                "face_shape": measured.get("face_shape"),
-                "hair_density": measured.get("hair_density"),
-                "hairline": measured.get("hairline"),
+                "face_shape": face_shape,
+                "hair_density": density,
+                "hairline": hairline,
                 "skin_undertone": measured.get("skin_undertone"),
+                "skin_depth": measured.get("skin_depth"),
+                "season": measured.get("season"),
                 "symmetry": measured.get("symmetry"),
+                "photogenic_score": measured.get("photogenic_score"),
+                "triage_categories": measured.get("triage_categories"),
             },
-            "limitations": list(limitations) + [f"error: {error_msg}", "fallback_no_llm_recommendations"],
+            "limitations": list(dict.fromkeys(limitations)),
             "recommended_eyebrow_shapes": ["Arco suave"],
             "recommended_makeup_styles": ["Natural"],
             "contouring_tips": [],
@@ -395,10 +558,22 @@ FORMATO JSON OBRIGATÓRIO:
             "color_recommendations": {
                 "hair_colors": [],
                 "avoid_colors": [],
-                "reasoning": "Colorimetria não disponível",
+                "reasoning": (
+                    "A colorimetria medida foi preservada, mas a interpretação avançada estava indisponível."
+                    if measured.get("skin_undertone")
+                    else "Colorimetria não confirmada para recomendação de cor."
+                ),
             },
-            "overall_recommendation": "Consulte um profissional. Análise automática indisponível.",
-            "confidence": 0.3,
+            "overall_recommendation": (
+                "Recomendação de contingência baseada apenas nas medições locais confirmadas."
+                if primary
+                else "Não há base medida suficiente para recomendar um corte com segurança."
+            ),
+            "confidence": 0.55 if primary else 0.3,
             "error": error_msg,
-            "data_source": {"measured": False, "llm_interpretation": False},
+            "data_source": {
+                "measured": bool(face_shape or density or hairline),
+                "llm_interpretation": False,
+                "rule_based_interpretation": bool(primary),
+            },
         }
