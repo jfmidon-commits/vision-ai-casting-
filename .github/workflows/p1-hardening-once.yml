@@ -31,7 +31,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm .github/workflows/p1-hardening-once.yml .github/scripts/p1_hardening.py
+          git checkout -- .github/workflows/ci.yml
+          git rm .github/scripts/p1_hardening.py
           git add -A
           git commit -m "fix: harden P1 simulation cost cache and recovery"
           git push origin HEAD:feature/visagism-real-hair-simulation-p1
