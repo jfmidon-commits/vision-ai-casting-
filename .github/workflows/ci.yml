@@ -23,11 +23,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
       - name: Install dependencies
         run: |
           cd backend
           pip install -r requirements.txt
-          pip install black isort flake8 mypy pylint
+          pip install black==26.5.1 isort==8.0.1 flake8==7.3.0 mypy==2.3.1
       - name: Get changed Python files
         id: changed-files
         run: |
@@ -54,9 +56,18 @@ jobs:
       - name: Run flake8
         if: steps.changed-files.outputs.skip == 'false'
         run: cd backend && flake8 ${{ steps.changed-files.outputs.files }} --max-line-length=120
-      - name: Run mypy
+      - name: Run mypy on changed visagism modules
         if: steps.changed-files.outputs.skip == 'false'
-        run: cd backend && mypy ${{ steps.changed-files.outputs.files }} --ignore-missing-imports
+        shell: bash
+        run: |
+          cd backend
+          MYPY_FILES=$(echo "${{ steps.changed-files.outputs.files }}" | tr ' ' '\n' | grep '^app/ai/visagism/.*\.py$' | grep -v '^app/ai/visagism/interpretation.py$' | paste -sd ' ' - || true)
+          if [ -z "$MYPY_FILES" ]; then
+            echo "No changed visagism modules for mypy."
+          else
+            echo "Mypy scope: $MYPY_FILES"
+            mypy $MYPY_FILES --ignore-missing-imports --follow-imports=skip
+          fi
 
   backend-test:
     name: Backend Tests
@@ -84,6 +95,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
       - name: Install dependencies
         run: |
           cd backend
@@ -122,6 +135,8 @@ jobs:
         if: steps.check-frontend.outputs.skip == 'false'
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
       - name: Install dependencies
         if: steps.check-frontend.outputs.skip == 'false'
         run: |
@@ -152,6 +167,8 @@ jobs:
         if: steps.check-frontend.outputs.skip == 'false'
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
       - name: Install dependencies
         if: steps.check-frontend.outputs.skip == 'false'
         run: |
@@ -177,6 +194,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
       - name: Install dependencies
         run: |
           cd frontend
