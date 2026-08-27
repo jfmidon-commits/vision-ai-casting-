@@ -35,6 +35,7 @@ def create_simulation_runtime() -> SimulationRuntime:
             api_key=settings.FAL_KEY,
             model=model,
             timeout_seconds=settings.VISAGISM_SIMULATION_TIMEOUT_SECONDS,
+            max_pixels=settings.VISAGISM_SIMULATION_MAX_PIXELS,
         )
 
     identity_provider = settings.VISAGISM_IDENTITY_PROVIDER.strip().lower()
