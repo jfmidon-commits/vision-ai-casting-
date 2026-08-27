@@ -63,20 +63,17 @@ function extractMessage(error: unknown): string {
       }
     ).response;
 
-    const apiMessage =
-      response?.data?.detail ||
-      response?.data?.message;
-
-    if (apiMessage) {
-      return apiMessage;
-    }
+    const apiMessage = response?.data?.detail || response?.data?.message;
+    if (apiMessage) return apiMessage;
   }
 
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-
+  if (error instanceof Error && error.message) return error.message;
   return "Não foi possível concluir esta etapa.";
+}
+
+function getStatusCode(error: unknown): number | undefined {
+  if (typeof error !== "object" || !error || !("response" in error)) return undefined;
+  return (error as { response?: { status?: number } }).response?.status;
 }
 
 function clearPersistedAnalysis() {
@@ -93,6 +90,7 @@ export default function VisagismPage() {
   const [isLoadingProfiles, setIsLoadingProfiles] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploaded, setUploaded] = useState<Record<string, UploadedPhotoState>>({});
+  const [activePhotoshootId, setActivePhotoshootId] = useState<string | null>(null);
   const [analysisId, setAnalysisId] = useState<string | null>(null);
   const [result, setResult] = useState<VisagismResult | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
@@ -168,6 +166,7 @@ export default function VisagismPage() {
 
         if (status === "failed") {
           clearPersistedAnalysis();
+          setAnalysisId(null);
           setErrorMessage(
             (response.data?.data?.error_message as string | undefined) ||
               "A análise não foi concluída. Tente novamente com outras fotos."
@@ -179,6 +178,14 @@ export default function VisagismPage() {
         timer = setTimeout(poll, 2000);
       } catch (error) {
         if (cancelled) return;
+        if (getStatusCode(error) === 409) {
+          clearPersistedAnalysis();
+          setAnalysisId(null);
+          setErrorMessage(extractMessage(error));
+          setStep("error");
+          return;
+        }
+
         setErrorMessage(extractMessage(error));
         setStep("error");
       }
@@ -197,6 +204,7 @@ export default function VisagismPage() {
       delete next[angle];
       return next;
     });
+    setActivePhotoshootId(null);
     setPhotos((current) =>
       current.map((photo) => {
         if (photo.angle !== angle) return photo;
@@ -216,6 +224,7 @@ export default function VisagismPage() {
       delete next[angle];
       return next;
     });
+    setActivePhotoshootId(null);
     setPhotos((current) =>
       current.map((photo) => {
         if (photo.angle !== angle) return photo;
@@ -234,6 +243,7 @@ export default function VisagismPage() {
     setIsSubmitting(true);
     setErrorMessage("");
     setUploaded({});
+    setActivePhotoshootId(null);
 
     try {
       const shootResponse = await photoshootApi.create({
@@ -245,7 +255,6 @@ export default function VisagismPage() {
       const photoshootId = shootResponse.data?.data?.id as string;
       if (!photoshootId) throw new Error("ID da sessão de fotos não retornado pelo servidor.");
 
-      const nextUploaded: Record<string, UploadedPhotoState> = {};
       for (const photo of photos) {
         if (!photo.file) continue;
         const uploadResponse = await photoshootApi.uploadPhoto(
@@ -257,20 +266,28 @@ export default function VisagismPage() {
         if (!photoId) throw new Error(`ID da foto ${photo.label} não retornado após upload.`);
 
         const triageResponse = await photoApi.triage(photoId);
-        nextUploaded[photo.angle] = {
-          photoId,
-          triage: triageResponse.data?.data as PhotoTriageResult,
-        };
+        const triage = triageResponse.data?.data as PhotoTriageResult;
+        setUploaded((current) => ({
+          ...current,
+          [photo.angle]: { photoId, triage },
+        }));
       }
 
-      setUploaded(nextUploaded);
-      const accepted = photos.every((photo) => nextUploaded[photo.angle]?.triage?.accepted);
-      if (!accepted) {
-        setIsSubmitting(false);
-        return;
-      }
+      setActivePhotoshootId(photoshootId);
+    } catch (error) {
+      setErrorMessage(extractMessage(error));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
-      const analysisResponse = await analysisApi.start(photoshootId, {
+  const startAnalysis = async () => {
+    if (!activePhotoshootId || !allTriaged) return;
+    setIsSubmitting(true);
+    setErrorMessage("");
+
+    try {
+      const analysisResponse = await analysisApi.start(activePhotoshootId, {
         analysis_types: ["facial", "grooming", "colorimetry", "photogenic", "expressions", "visagism"],
         priority: "normal",
         notify_on_complete: true,
@@ -296,6 +313,7 @@ export default function VisagismPage() {
     setStep("upload");
     setPhotos(initialPhotos.map((p) => ({ ...p })));
     setUploaded({});
+    setActivePhotoshootId(null);
     setAnalysisId(null);
     setResult(null);
     setErrorMessage("");
@@ -327,7 +345,7 @@ export default function VisagismPage() {
           <p className="text-sm font-medium text-muted-foreground">Revisão</p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">Confira suas fotos</h1>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Ao enviar, cada foto passa pela triagem antes da análise. Fotos inadequadas ficam bloqueadas e podem ser refeitas.
+            Primeiro enviamos e validamos as três fotos. A análise só é liberada quando todas estiverem aprovadas.
           </p>
         </div>
 
@@ -370,12 +388,21 @@ export default function VisagismPage() {
         ) : null}
 
         <div className="mt-auto pt-8">
-          {Object.keys(uploaded).length > 0 && !allTriaged ? (
-            <div className="mb-3 rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">Pelo menos uma foto precisa ser refeita antes de continuar.</div>
+          {Object.keys(uploaded).length > 0 && !allTriaged && !isSubmitting ? (
+            <div className="mb-3 rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
+              Aguarde as três triagens. Se alguma foto for rejeitada, refaça apenas aquela foto.
+            </div>
           ) : null}
-          <Button className="h-12 w-full text-base" disabled={!allSelected || isSubmitting} onClick={uploadAndTriage}>
-            {isSubmitting ? "Enviando e validando..." : Object.keys(uploaded).length ? "Validar novamente" : "Enviar para análise"}
-          </Button>
+
+          {allTriaged && activePhotoshootId ? (
+            <Button className="h-12 w-full text-base" disabled={isSubmitting} onClick={startAnalysis}>
+              {isSubmitting ? "Iniciando análise..." : "Iniciar análise"}
+            </Button>
+          ) : (
+            <Button className="h-12 w-full text-base" disabled={!allSelected || isSubmitting} onClick={uploadAndTriage}>
+              {isSubmitting ? "Enviando e validando..." : "Enviar fotos para triagem"}
+            </Button>
+          )}
         </div>
       </main>
     );
@@ -401,16 +428,7 @@ export default function VisagismPage() {
       <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col items-center justify-center bg-background px-6 text-center">
         <h1 className="text-2xl font-semibold">Não foi possível concluir</h1>
         <p className="mt-3 text-sm leading-6 text-muted-foreground">{errorMessage}</p>
-        {analysisId ? (
-          <Button className="mt-7 h-12 w-full" onClick={() => setStep("processing")}>Retomar análise</Button>
-        ) : (
-          <Button className="mt-7 h-12 w-full" onClick={resetFlow}>Tentar novamente</Button>
-        )}
-        {analysisId ? (
-          <button type="button" className="mt-4 text-sm text-muted-foreground underline" onClick={resetFlow}>
-            Começar uma nova análise
-          </button>
-        ) : null}
+        <Button className="mt-7 h-12 w-full" onClick={resetFlow}>Começar uma nova análise</Button>
       </main>
     );
   }
