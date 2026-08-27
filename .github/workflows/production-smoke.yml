@@ -1,0 +1,47 @@
+name: Production Smoke
+
+on:
+  workflow_run:
+    workflows: ["CI/CD Pipeline"]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  render-production-health:
+    name: Render Production Health
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Wait for the exact main revision on Render
+        env:
+          HEALTH_URL: https://vision-ai-casting-api.onrender.com/health
+          EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+
+          echo "Waiting for Render to serve commit: ${EXPECTED_SHA}"
+          echo "Health endpoint: ${HEALTH_URL}"
+
+          for attempt in $(seq 1 30); do
+            response="$(curl --silent --show-error --fail --max-time 20 "${HEALTH_URL}" || true)"
+            status="$(printf '%s' "${response}" | jq -r '.status // empty' 2>/dev/null || true)"
+            commit="$(printf '%s' "${response}" | jq -r '.commit // empty' 2>/dev/null || true)"
+            version="$(printf '%s' "${response}" | jq -r '.version // empty' 2>/dev/null || true)"
+
+            echo "Attempt ${attempt}/30: status=${status:-unavailable} commit=${commit:-unavailable} version=${version:-unknown}"
+
+            if [ "${status}" = "healthy" ] && [ "${commit}" = "${EXPECTED_SHA}" ]; then
+              echo "Render production is healthy and is serving the expected revision."
+              exit 0
+            fi
+
+            if [ "${attempt}" -lt 30 ]; then
+              sleep 20
+            fi
+          done
+
+          echo "Render did not expose the expected revision within the smoke-test window."
+          echo "Expected: ${EXPECTED_SHA}"
+          echo "Last response: ${response:-<empty>}"
+          exit 1
