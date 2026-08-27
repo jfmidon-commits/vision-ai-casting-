@@ -5,6 +5,12 @@ from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 from uuid import UUID
 
+from fastapi import APIRouter, Depends, HTTPException
+from PIL import Image
+from pydantic import BaseModel, Field
+from sqlalchemy import and_, select, text
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.ai.visagism.adapters.mediapipe_hair_mask import MediaPipeHairBeardMaskAdapter
 from app.ai.visagism.barber_brief import build_barber_brief_for_haircut
 from app.ai.visagism.interpretation import build_visagism_interpretation
@@ -24,11 +30,6 @@ from app.models import Analysis, Photo
 from app.schemas import AnalysisResponse, APIResponse
 from app.services.storage_service import StorageService
 from app.utils.logger import get_logger
-from fastapi import APIRouter, Depends, HTTPException
-from PIL import Image
-from pydantic import BaseModel, Field
-from sqlalchemy import and_, select, text
-from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/api/v1/analyses", tags=["analyses"])
 logger = get_logger(__name__)

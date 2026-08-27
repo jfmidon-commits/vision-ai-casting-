@@ -12,8 +12,9 @@ from typing import Any, Optional
 
 import boto3
 import numpy as np
-from app.config import settings
 from PIL import Image
+
+from app.config import settings
 
 
 class AWSRekognitionIdentityVerifier:

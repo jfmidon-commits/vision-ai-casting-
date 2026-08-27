@@ -2,10 +2,11 @@ import sys
 from unittest.mock import patch
 
 import numpy as np
+from PIL import Image
+
 from app.ai.visagism.adapters.deepface_identity import DeepFaceArcFaceVerifier
 from app.ai.visagism.adapters.mediapipe_hair_mask import MediaPipeHairBeardMaskAdapter
 from app.ai.visagism.simulation_service import VisagismSimulationService
-from PIL import Image
 
 
 def _synthetic_landmarks():
