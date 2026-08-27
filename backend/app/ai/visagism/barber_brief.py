@@ -59,5 +59,8 @@ def build_barber_brief_for_haircut(
         "texture": guidance["texture"],
         "finish": guidance["finish"],
         "avoid": guidance["avoid"],
-        "note": "As orientações descrevem o efeito visual do corte sem inventar comprimentos em cm/mm; o ajuste final deve ser feito no cabelo real.",
+        "note": (
+            "As orientações descrevem o efeito visual do corte sem inventar "
+            "comprimentos em cm/mm; o ajuste final deve ser feito no cabelo real."
+        ),
     }
