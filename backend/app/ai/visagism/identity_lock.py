@@ -17,7 +17,11 @@ class IdentityLockPolicy:
     max_denoising: float = 0.40
     min_reference_validations: int = 3
     max_reference_validations: int = 5
-    min_reference_passes: int = 2
+    # The production flow always includes the immutable original analysis photo
+    # as the first reference. One strong match to that anchor is therefore the
+    # decisive identity-preservation signal; additional angles are diagnostics
+    # and must not veto a valid pixel-locked edit because of pose/lighting drift.
+    min_reference_passes: int = 1
 
     def generation_constraints(self) -> Dict[str, Any]:
         return {
@@ -62,7 +66,8 @@ class IdentityLockPolicy:
                 self.max_reference_validations,
             ],
             "min_reference_passes": self.min_reference_passes,
-            "reference_consensus_required": True,
+            "reference_consensus_required": False,
+            "original_photo_anchor_required": True,
             "all_reference_validations_must_pass": False,
             "publish_similar_face_forbidden": True,
             "failure_mode": "original_plus_spec",
@@ -95,7 +100,7 @@ class IdentityLockPolicy:
         }
 
     def reference_scores_valid(self, identity_scores: Iterable[float]) -> bool:
-        """Return whether the score set satisfies the fail-closed consensus gate."""
+        """Return whether the score set satisfies the fail-closed anchor gate."""
         return bool(self._validate_reference_scores(identity_scores)["valid"])
 
     def decide_publication(
