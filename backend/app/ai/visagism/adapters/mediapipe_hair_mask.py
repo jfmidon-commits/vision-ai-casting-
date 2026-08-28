@@ -26,10 +26,10 @@ class MediaPipeHairBeardMaskAdapter:
     intentionally disabled. ``build_hair_beard_mask`` remains as a temporary
     alias for older callers and returns the same hair-only result.
 
-    MediaPipe inference is capped to a bounded longest side. Phone photos can
-    easily be multi-megapixel, while both Face Mesh landmarks and Selfie
-    Segmentation remain reliable at a much smaller inference resolution. The
-    final mask is still produced at the source-photo resolution.
+    All expensive mask construction now runs on a bounded working image. This
+    is important on the Render free worker because phone photos can be 10-20 MP
+    and a full-resolution float32 segmentation map alone can consume tens of
+    megabytes. Only the final uint8 mask is restored to source resolution.
     """
 
     coverage_min: float = 0.02
@@ -38,7 +38,7 @@ class MediaPipeHairBeardMaskAdapter:
     side_expand_ratio: float = 0.15
     top_expand_ratio: float = 0.30
     person_threshold: float = 0.70
-    inference_max_side: int = 768
+    inference_max_side: int = 512
     detector: Optional[LandmarkDetector] = None
     person_segmenter: Optional[PersonSegmenter] = None
 
@@ -88,17 +88,19 @@ class MediaPipeHairBeardMaskAdapter:
     MOUTH: Tuple[int, ...] = (61, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291, 17)
 
     def build_hair_mask(self, original_photo: Any) -> Dict[str, Any]:
-        rgb = self._to_rgb_array(original_photo)
+        rgb, source_height, source_width = self._prepare_working_rgb(original_photo)
         height, width = rgb.shape[:2]
         landmarks = self._detect_landmarks(rgb)
         if not landmarks:
-            return self._invalid("face_not_detected", height, width)
+            return self._invalid("face_not_detected", source_height, source_width)
         if max(self.FACE_OVAL) >= len(landmarks):
-            return self._invalid("insufficient_landmarks", height, width)
+            return self._invalid("insufficient_landmarks", source_height, source_width)
 
         person_probability = self._segment_person(rgb)
         if person_probability is None or person_probability.shape != (height, width):
-            return self._invalid("person_segmentation_failed", height, width)
+            return self._invalid(
+                "person_segmentation_failed", source_height, source_width
+            )
 
         face_points = self._points(landmarks, self.FACE_OVAL, width, height)
         xs = face_points[:, 0]
@@ -113,13 +115,11 @@ class MediaPipeHairBeardMaskAdapter:
         roi_bottom = max(0, y_min)
         roi_top = max(0, int(y_min - face_h * self.top_expand_ratio))
         if roi_right <= roi_left or roi_bottom <= roi_top:
-            return self._invalid("hair_roi_unreliable", height, width)
+            return self._invalid("hair_roi_unreliable", source_height, source_width)
 
         roi = np.zeros((height, width), dtype=np.uint8)
         roi[roi_top:roi_bottom, roi_left:roi_right] = 255
 
-        # High-confidence person pixels keep background outside the editable
-        # region. Eroding one pixel further reduces boundary leakage.
         import cv2
 
         person = (person_probability >= self.person_threshold).astype(np.uint8) * 255
@@ -146,7 +146,7 @@ class MediaPipeHairBeardMaskAdapter:
         active = mask > 0
         active_count = int(active.sum())
         if active_count == 0:
-            return self._invalid("hair_roi_empty", height, width)
+            return self._invalid("hair_roi_empty", source_height, source_width)
 
         overlap_count = int(np.logical_and(active, protected > 0).sum())
         protected_overlap_ratio = overlap_count / active_count
@@ -156,17 +156,29 @@ class MediaPipeHairBeardMaskAdapter:
         coverage_ratio = active_count / head_area
         if coverage_ratio < self.coverage_min or coverage_ratio > self.coverage_max:
             return {
-                **self._invalid("hair_roi_coverage_out_of_range", height, width),
+                **self._invalid(
+                    "hair_roi_coverage_out_of_range", source_height, source_width
+                ),
                 "coverage_ratio": float(coverage_ratio),
                 "protected_overlap_ratio": float(protected_overlap_ratio),
             }
         if protected_touched:
             return {
-                **self._invalid("protected_region_in_mask", height, width),
+                **self._invalid("protected_region_in_mask", source_height, source_width),
                 "coverage_ratio": float(coverage_ratio),
                 "protected_overlap_ratio": float(protected_overlap_ratio),
                 "protected_regions_touched": True,
             }
+
+        if (width, height) != (source_width, source_height):
+            mask = np.asarray(
+                cv2.resize(
+                    mask,
+                    (source_width, source_height),
+                    interpolation=cv2.INTER_NEAREST,
+                ),
+                dtype=np.uint8,
+            )
 
         return {
             "valid": True,
@@ -193,7 +205,6 @@ class MediaPipeHairBeardMaskAdapter:
         except ImportError:
             return None
 
-        inference_rgb = self._resize_for_inference(rgb)
         face_mesh = mp.solutions.face_mesh.FaceMesh(
             static_image_mode=True,
             max_num_faces=1,
@@ -201,7 +212,7 @@ class MediaPipeHairBeardMaskAdapter:
             min_detection_confidence=0.5,
         )
         try:
-            result = face_mesh.process(inference_rgb)
+            result = face_mesh.process(rgb)
         finally:
             face_mesh.close()
         if not result.multi_face_landmarks:
@@ -219,28 +230,34 @@ class MediaPipeHairBeardMaskAdapter:
         except ImportError:
             return None
 
-        import cv2
-
-        original_height, original_width = rgb.shape[:2]
-        inference_rgb = self._resize_for_inference(rgb)
         segmenter = mp.solutions.selfie_segmentation.SelfieSegmentation(
             model_selection=0
         )
         try:
-            result = segmenter.process(inference_rgb)
+            result = segmenter.process(rgb)
         finally:
             segmenter.close()
         mask = getattr(result, "segmentation_mask", None)
         if mask is None:
             return None
-        probability = np.asarray(mask, dtype=np.float32)
-        if probability.shape != (original_height, original_width):
-            probability = cv2.resize(
-                probability,
-                (original_width, original_height),
-                interpolation=cv2.INTER_LINEAR,
-            )
-        return np.asarray(probability, dtype=np.float32)
+        return np.asarray(mask, dtype=np.float32)
+
+    def _prepare_working_rgb(self, image: Any) -> Tuple[np.ndarray, int, int]:
+        if isinstance(image, Image.Image):
+            source_width, source_height = image.size
+            working = image if image.mode == "RGB" else image.convert("RGB")
+            if max(source_height, source_width) > self.inference_max_side:
+                scale = self.inference_max_side / float(max(source_height, source_width))
+                working_width = max(1, int(round(source_width * scale)))
+                working_height = max(1, int(round(source_height * scale)))
+                working = working.resize(
+                    (working_width, working_height), Image.Resampling.LANCZOS
+                )
+            return np.asarray(working, dtype=np.uint8), source_height, source_width
+
+        rgb = self._to_rgb_array(image)
+        source_height, source_width = rgb.shape[:2]
+        return self._resize_for_inference(rgb), source_height, source_width
 
     def _resize_for_inference(self, rgb: np.ndarray) -> np.ndarray:
         height, width = rgb.shape[:2]
