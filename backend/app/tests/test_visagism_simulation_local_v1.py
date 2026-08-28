@@ -246,19 +246,19 @@ def test_service_ready_path_is_pixel_locked_and_identity_guarded():
     assert np.any(candidate_arr[mask] != original_arr[mask])
 
 
-def test_service_blocks_when_reference_identity_gate_fails():
-    class OneFailVerifier:
+def test_service_blocks_when_reference_identity_consensus_fails():
+    class NoConsensusVerifier:
         calls = 0
 
         def compare(self, candidate, reference):
             self.calls += 1
-            return 0.79 if self.calls == 2 else 0.90
+            return 0.90 if self.calls == 1 else 0.79
 
     original = _image(60)
     refs = [_image(61), _image(62), _image(63)]
     service = VisagismSimulationService(
         mask_adapter=_adapter(),
-        verifier=OneFailVerifier(),
+        verifier=NoConsensusVerifier(),
         renderer=FullFrameRenderer(),
     )
 

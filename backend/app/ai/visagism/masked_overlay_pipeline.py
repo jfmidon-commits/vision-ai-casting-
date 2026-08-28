@@ -87,7 +87,7 @@ class MaskedOverlayPipeline:
         scores = [
             self.verifier.compare(candidate, ref) for ref in real_reference_photos
         ]
-        if any(score < self.policy.identity_threshold for score in scores):
+        if not self.policy.reference_scores_valid(scores):
             return self._fallback(
                 original_photo,
                 "identity_lock_failed",
