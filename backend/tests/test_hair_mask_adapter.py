@@ -1,4 +1,5 @@
 import numpy as np
+from PIL import Image
 
 from app.ai.visagism.adapters.mediapipe_hair_mask import MediaPipeHairBeardMaskAdapter
 
@@ -92,3 +93,29 @@ def test_media_inference_resize_keeps_small_images_unchanged():
     resized = adapter._resize_for_inference(image)
 
     assert resized is image
+
+
+def test_full_mask_pipeline_runs_bounded_and_restores_source_mask_size():
+    seen = {}
+
+    def detector(image):
+        seen["detector_shape"] = image.shape
+        return _landmarks()
+
+    def segmenter(image):
+        seen["segmenter_shape"] = image.shape
+        return np.ones(image.shape[:2], dtype=np.float32)
+
+    source = Image.new("RGB", (1600, 1200), "white")
+    adapter = MediaPipeHairBeardMaskAdapter(
+        inference_max_side=400,
+        detector=detector,
+        person_segmenter=segmenter,
+    )
+
+    result = adapter.build_hair_mask(source)
+
+    assert result["valid"] is True
+    assert seen["detector_shape"] == (300, 400, 3)
+    assert seen["segmenter_shape"] == (300, 400, 3)
+    assert result["mask"].shape == (1200, 1600)

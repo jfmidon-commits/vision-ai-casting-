@@ -18,6 +18,8 @@ from app.config import settings
 
 
 class AWSRekognitionIdentityVerifier:
+    max_encode_side = 1024
+
     def __init__(self, client: Optional[Any] = None) -> None:
         self.client = client or boto3.client(
             "rekognition",
@@ -26,17 +28,25 @@ class AWSRekognitionIdentityVerifier:
             region_name=settings.AWS_REGION,
         )
 
-    @staticmethod
-    def _to_jpeg_bytes(image: Any) -> bytes:
+    @classmethod
+    def _to_jpeg_bytes(cls, image: Any) -> bytes:
         if isinstance(image, np.ndarray):
             pil = Image.fromarray(image.astype(np.uint8)).convert("RGB")
         elif isinstance(image, Image.Image):
-            pil = image.convert("RGB")
+            pil = image if image.mode == "RGB" else image.convert("RGB")
         else:
             raise TypeError("identity verifier requires PIL.Image or numpy.ndarray")
 
+        if max(pil.size) > cls.max_encode_side:
+            scale = cls.max_encode_side / float(max(pil.size))
+            size = (
+                max(1, int(round(pil.width * scale))),
+                max(1, int(round(pil.height * scale))),
+            )
+            pil = pil.resize(size, Image.Resampling.LANCZOS)
+
         buffer = io.BytesIO()
-        pil.save(buffer, format="JPEG", quality=95)
+        pil.save(buffer, format="JPEG", quality=90, optimize=False)
         return buffer.getvalue()
 
     def compare(self, candidate: Any, reference: Any) -> float:

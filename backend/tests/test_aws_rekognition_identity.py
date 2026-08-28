@@ -10,9 +10,11 @@ class FakeRekognition:
         self.similarity = similarity
         self.error = error
         self.calls = 0
+        self.last_kwargs = None
 
     def compare_faces(self, **kwargs):
         self.calls += 1
+        self.last_kwargs = kwargs
         if self.error:
             raise RuntimeError("boom")
         return {"FaceMatches": [{"Similarity": self.similarity}]}
@@ -43,3 +45,18 @@ def test_identity_verifier_fails_closed_on_aws_error():
     score = verifier.compare(Image.new("RGB", (4, 4)), Image.new("RGB", (4, 4)))
 
     assert score == 0.0
+
+
+def test_rekognition_encoding_bounds_large_images_before_upload():
+    client = FakeRekognition()
+    verifier = AWSRekognitionIdentityVerifier(client=client)
+
+    verifier.compare(Image.new("RGB", (4000, 3000)), Image.new("RGB", (3000, 4000)))
+
+    source_bytes = client.last_kwargs["SourceImage"]["Bytes"]
+    target_bytes = client.last_kwargs["TargetImage"]["Bytes"]
+    for raw in (source_bytes, target_bytes):
+        from io import BytesIO
+
+        with Image.open(BytesIO(raw)) as encoded:
+            assert max(encoded.size) <= verifier.max_encode_side
