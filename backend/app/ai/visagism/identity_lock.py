@@ -17,6 +17,7 @@ class IdentityLockPolicy:
     max_denoising: float = 0.40
     min_reference_validations: int = 3
     max_reference_validations: int = 5
+    min_reference_passes: int = 2
 
     def generation_constraints(self) -> Dict[str, Any]:
         return {
@@ -60,7 +61,9 @@ class IdentityLockPolicy:
                 self.min_reference_validations,
                 self.max_reference_validations,
             ],
-            "all_reference_validations_must_pass": True,
+            "min_reference_passes": self.min_reference_passes,
+            "reference_consensus_required": True,
+            "all_reference_validations_must_pass": False,
             "publish_similar_face_forbidden": True,
             "failure_mode": "original_plus_spec",
         }
@@ -77,18 +80,23 @@ class IdentityLockPolicy:
             <= len(scores)
             <= self.max_reference_validations
         )
-        threshold_valid = bool(scores) and all(
-            score >= self.identity_threshold for score in scores
-        )
+        pass_count = sum(score >= self.identity_threshold for score in scores)
+        threshold_valid = bool(scores) and pass_count >= self.min_reference_passes
         return {
             "valid": bool(count_valid and threshold_valid),
             "scores": scores,
             "count_valid": count_valid,
             "threshold_valid": threshold_valid,
+            "pass_count": pass_count,
+            "required_pass_count": self.min_reference_passes,
             "reason": (
                 None if count_valid and threshold_valid else "identity_lock_failed"
             ),
         }
+
+    def reference_scores_valid(self, identity_scores: Iterable[float]) -> bool:
+        """Return whether the score set satisfies the fail-closed consensus gate."""
+        return bool(self._validate_reference_scores(identity_scores)["valid"])
 
     def decide_publication(
         self,
@@ -113,6 +121,10 @@ class IdentityLockPolicy:
             "event": "visagism_identity_validation",
             "identity_threshold": self.identity_threshold,
             "identity_scores": validation["scores"],
+            "identity_pass_count": validation.get("pass_count", 0),
+            "identity_required_pass_count": validation.get(
+                "required_pass_count", self.min_reference_passes
+            ),
             "mask_valid": mask_valid,
             "protected_regions_unchanged": protected_regions_unchanged,
             "body_unchanged": body_unchanged,
