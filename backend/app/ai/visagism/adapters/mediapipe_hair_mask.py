@@ -25,6 +25,11 @@ class MediaPipeHairBeardMaskAdapter:
     The historical class name is retained for compatibility. Beard editing is
     intentionally disabled. ``build_hair_beard_mask`` remains as a temporary
     alias for older callers and returns the same hair-only result.
+
+    MediaPipe inference is capped to a bounded longest side. Phone photos can
+    easily be multi-megapixel, while both Face Mesh landmarks and Selfie
+    Segmentation remain reliable at a much smaller inference resolution. The
+    final mask is still produced at the source-photo resolution.
     """
 
     coverage_min: float = 0.02
@@ -33,6 +38,7 @@ class MediaPipeHairBeardMaskAdapter:
     side_expand_ratio: float = 0.15
     top_expand_ratio: float = 0.30
     person_threshold: float = 0.70
+    inference_max_side: int = 768
     detector: Optional[LandmarkDetector] = None
     person_segmenter: Optional[PersonSegmenter] = None
 
@@ -187,14 +193,15 @@ class MediaPipeHairBeardMaskAdapter:
         except ImportError:
             return None
 
+        inference_rgb = self._resize_for_inference(rgb)
         face_mesh = mp.solutions.face_mesh.FaceMesh(
             static_image_mode=True,
             max_num_faces=1,
-            refine_landmarks=True,
+            refine_landmarks=False,
             min_detection_confidence=0.5,
         )
         try:
-            result = face_mesh.process(rgb)
+            result = face_mesh.process(inference_rgb)
         finally:
             face_mesh.close()
         if not result.multi_face_landmarks:
@@ -212,17 +219,48 @@ class MediaPipeHairBeardMaskAdapter:
         except ImportError:
             return None
 
+        import cv2
+
+        original_height, original_width = rgb.shape[:2]
+        inference_rgb = self._resize_for_inference(rgb)
         segmenter = mp.solutions.selfie_segmentation.SelfieSegmentation(
             model_selection=0
         )
         try:
-            result = segmenter.process(rgb)
+            result = segmenter.process(inference_rgb)
         finally:
             segmenter.close()
         mask = getattr(result, "segmentation_mask", None)
         if mask is None:
             return None
-        return np.asarray(mask, dtype=np.float32)
+        probability = np.asarray(mask, dtype=np.float32)
+        if probability.shape != (original_height, original_width):
+            probability = cv2.resize(
+                probability,
+                (original_width, original_height),
+                interpolation=cv2.INTER_LINEAR,
+            )
+        return np.asarray(probability, dtype=np.float32)
+
+    def _resize_for_inference(self, rgb: np.ndarray) -> np.ndarray:
+        height, width = rgb.shape[:2]
+        longest = max(height, width)
+        if longest <= self.inference_max_side:
+            return rgb
+
+        import cv2
+
+        scale = self.inference_max_side / float(longest)
+        resized_width = max(1, int(round(width * scale)))
+        resized_height = max(1, int(round(height * scale)))
+        return np.asarray(
+            cv2.resize(
+                rgb,
+                (resized_width, resized_height),
+                interpolation=cv2.INTER_AREA,
+            ),
+            dtype=np.uint8,
+        )
 
     @staticmethod
     def _to_rgb_array(image: Any) -> np.ndarray:
