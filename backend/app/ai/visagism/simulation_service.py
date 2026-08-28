@@ -76,7 +76,7 @@ class VisagismSimulationService:
             1.0 if ref is original_photo else self.verifier.compare(original_photo, ref)
             for ref in real_reference_photos
         ]
-        if any(score < self.policy.identity_threshold for score in scores):
+        if not self.policy.reference_scores_valid(scores):
             return {
                 "eligible": False,
                 "reason": "reference_identity_gate_failed",
