@@ -246,19 +246,21 @@ def test_service_ready_path_is_pixel_locked_and_identity_guarded():
     assert np.any(candidate_arr[mask] != original_arr[mask])
 
 
-def test_service_blocks_when_reference_identity_consensus_fails():
-    class NoConsensusVerifier:
+def test_service_blocks_when_candidate_fails_original_anchor_after_preflight():
+    class AnchorThenFailVerifier:
         calls = 0
 
         def compare(self, candidate, reference):
             self.calls += 1
+            # Preflight gets one strong identity anchor and is allowed to render.
+            # Every candidate/reference comparison then fails the 0.80 threshold.
             return 0.90 if self.calls == 1 else 0.79
 
     original = _image(60)
     refs = [_image(61), _image(62), _image(63)]
     service = VisagismSimulationService(
         mask_adapter=_adapter(),
-        verifier=NoConsensusVerifier(),
+        verifier=AnchorThenFailVerifier(),
         renderer=FullFrameRenderer(),
     )
 
@@ -271,5 +273,5 @@ def test_service_blocks_when_reference_identity_consensus_fails():
     )
 
     assert result["simulation_status"] == "blocked"
-    assert result["reason"] == "reference_identity_gate_failed"
+    assert result["reason"] == "identity_lock_failed"
     assert result["card_media"]["displayImage"] is original
