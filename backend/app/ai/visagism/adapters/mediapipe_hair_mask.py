@@ -164,7 +164,9 @@ class MediaPipeHairBeardMaskAdapter:
             }
         if protected_touched:
             return {
-                **self._invalid("protected_region_in_mask", source_height, source_width),
+                **self._invalid(
+                    "protected_region_in_mask", source_height, source_width
+                ),
                 "coverage_ratio": float(coverage_ratio),
                 "protected_overlap_ratio": float(protected_overlap_ratio),
                 "protected_regions_touched": True,
