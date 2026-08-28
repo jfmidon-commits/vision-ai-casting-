@@ -1,0 +1,20 @@
+name: Black Diff Debug
+
+on:
+  push:
+    branches:
+      - fix/p1-memory-v2
+    paths:
+      - 'backend/app/ai/visagism/adapters/mediapipe_hair_mask.py'
+      - '.github/workflows/black-diff-debug.yml'
+
+jobs:
+  black-diff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install black==26.5.1
+      - run: black --diff --check backend/app/ai/visagism/adapters/mediapipe_hair_mask.py
