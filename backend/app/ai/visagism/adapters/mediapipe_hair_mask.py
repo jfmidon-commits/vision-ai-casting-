@@ -247,7 +247,9 @@ class MediaPipeHairBeardMaskAdapter:
             source_width, source_height = image.size
             working = image if image.mode == "RGB" else image.convert("RGB")
             if max(source_height, source_width) > self.inference_max_side:
-                scale = self.inference_max_side / float(max(source_height, source_width))
+                scale = self.inference_max_side / float(
+                    max(source_height, source_width)
+                )
                 working_width = max(1, int(round(source_width * scale)))
                 working_height = max(1, int(round(source_height * scale)))
                 working = working.resize(
