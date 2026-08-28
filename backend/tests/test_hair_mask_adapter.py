@@ -74,3 +74,21 @@ def test_legacy_hair_beard_method_is_hair_only_alias():
     assert result["valid"] is True
     assert result["beard_enabled"] is False
     assert result["mask_kind"] == "person_intersection_hair_roi_v2"
+
+
+def test_media_inference_resize_caps_longest_side_and_preserves_aspect_ratio():
+    image = np.zeros((3000, 4000, 3), dtype=np.uint8)
+    adapter = MediaPipeHairBeardMaskAdapter(inference_max_side=768)
+
+    resized = adapter._resize_for_inference(image)
+
+    assert resized.shape == (576, 768, 3)
+
+
+def test_media_inference_resize_keeps_small_images_unchanged():
+    image = np.zeros((480, 640, 3), dtype=np.uint8)
+    adapter = MediaPipeHairBeardMaskAdapter(inference_max_side=768)
+
+    resized = adapter._resize_for_inference(image)
+
+    assert resized is image
