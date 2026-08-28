@@ -1,0 +1,1 @@
+Original analysis photo is the mandatory identity anchor for haircut simulation. Additional source photos are diagnostic references and must not veto a candidate that matches the immutable original at the configured threshold.
