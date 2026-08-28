@@ -9,8 +9,9 @@ def test_identity_lock_defaults_are_strict_and_hair_only():
     assert constraints["mask_scope"] == "hair_only"
     assert constraints["identity_weight_min"] >= 0.85
     assert constraints["identity_threshold"] >= 0.80
-    assert constraints["reference_consensus_required"] is True
-    assert constraints["min_reference_passes"] == 2
+    assert constraints["reference_consensus_required"] is False
+    assert constraints["original_photo_anchor_required"] is True
+    assert constraints["min_reference_passes"] == 1
     assert constraints["all_reference_validations_must_pass"] is False
     assert constraints["publish_similar_face_forbidden"] is True
     assert "beard" in constraints["forbidden_regions"]
@@ -18,11 +19,11 @@ def test_identity_lock_defaults_are_strict_and_hair_only():
     assert "background" in constraints["forbidden_regions"]
 
 
-def test_allows_consensus_when_one_reference_is_a_bad_angle():
+def test_allows_when_original_anchor_passes_and_other_angles_are_weak():
     result = IdentityLockPolicy().decide_publication(
         original_photo="original.jpg",
         simulated_photo="simulation.jpg",
-        identity_scores=[0.99, 0.91, 0.72],
+        identity_scores=[0.99, 0.79, 0.72],
         mask_valid=True,
         protected_regions_unchanged=True,
         body_unchanged=True,
@@ -31,14 +32,14 @@ def test_allows_consensus_when_one_reference_is_a_bad_angle():
     assert result["mode"] == "hair_overlay"
     assert result["simulationApplied"] is True
     assert result["identityVerified"] is True
-    assert result["audit"]["identity_pass_count"] == 2
+    assert result["audit"]["identity_pass_count"] == 1
 
 
-def test_blocks_when_consensus_is_not_reached():
+def test_blocks_when_no_reference_reaches_identity_threshold():
     result = IdentityLockPolicy().decide_publication(
         original_photo="original.jpg",
         simulated_photo="simulation.jpg",
-        identity_scores=[0.99, 0.79, 0.72],
+        identity_scores=[0.79, 0.76, 0.72],
         mask_valid=True,
         protected_regions_unchanged=True,
         body_unchanged=True,
@@ -79,7 +80,7 @@ def test_requires_three_to_five_real_reference_validations():
 
 def test_blocks_when_mask_face_or_body_protection_fails():
     policy = IdentityLockPolicy()
-    scores = [0.95, 0.94, 0.73]
+    scores = [0.95, 0.74, 0.73]
     cases = [
         dict(mask_valid=False, protected_regions_unchanged=True, body_unchanged=True),
         dict(mask_valid=True, protected_regions_unchanged=False, body_unchanged=True),
@@ -96,11 +97,11 @@ def test_blocks_when_mask_face_or_body_protection_fails():
         assert result["image"] == "original.jpg"
 
 
-def test_allows_only_hair_overlay_after_consensus_and_protection_passes():
+def test_allows_only_hair_overlay_after_anchor_and_protection_passes():
     result = IdentityLockPolicy().decide_publication(
         original_photo="original.jpg",
         simulated_photo="hair-overlay.png",
-        identity_scores=[0.91, 0.93, 0.74],
+        identity_scores=[0.91, 0.73, 0.74],
         mask_valid=True,
         protected_regions_unchanged=True,
         body_unchanged=True,
