@@ -1,0 +1,1 @@
+Haircut previews preserve the original analysis photo as the mandatory identity anchor. Three to five source/reference images remain required, but extra angles are advisory diagnostics; the candidate must match the immutable original source at the configured identity threshold.
