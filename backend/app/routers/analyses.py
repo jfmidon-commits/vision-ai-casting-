@@ -39,17 +39,23 @@ logger = get_logger(__name__)
 
 SIMULATION_DENOISING = 0.30
 SIMULATION_IDENTITY_WEIGHT = 0.90
+SIMULATION_SOURCE_MAX_SIDE = 1024
 
 
 class VisagismSimulationRequest(BaseModel):
     haircut_name: str = Field(..., min_length=1, max_length=200)
 
 
-def _read_pil_storage_image(url: str) -> Image.Image:
+def _read_pil_storage_image(
+    url: str, max_side: int = SIMULATION_SOURCE_MAX_SIDE
+) -> Image.Image:
     raw = StorageService.read_object_from_url(url)
     with Image.open(io.BytesIO(raw)) as image:
         normalized = ImageOps.exif_transpose(image)
-        return normalized.convert("RGB").copy()
+        normalized.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
+        if normalized.mode != "RGB":
+            normalized = normalized.convert("RGB")
+        return normalized.copy()
 
 
 def _pil_to_png_bytes(image: Any) -> bytes:
@@ -408,18 +414,43 @@ async def simulate_visagism_haircut(
             message="Simulation blocked safely",
         )
 
-    # The normal mobile flow has three real photos total. The original source
-    # is also a legitimate identity reference, giving the required 3 refs.
+    # Keep the production request below the Render free-instance memory ceiling:
+    # exactly three identity references, loaded one at a time and immediately
+    # bounded before the next source is decoded. Parallel decoding of 10-20 MP
+    # phone photos can otherwise create a large transient RGB/PIL memory spike.
     selected_photos = [original] + [
         photo for photo in photos if photo.id != original.id
-    ][:4]
-    downloaded = await asyncio.gather(
-        *[
-            asyncio.to_thread(_read_pil_storage_image, photo.url)
-            for photo in selected_photos
-        ],
-        return_exceptions=True,
+    ][:2]
+    downloaded = []
+    logger.info(
+        "Visagism simulation source load start analysis=%s haircut=%s refs=%s max_side=%s",
+        analysis_id,
+        request.haircut_name,
+        len(selected_photos),
+        SIMULATION_SOURCE_MAX_SIDE,
     )
+    for index, photo in enumerate(selected_photos):
+        try:
+            image = await asyncio.to_thread(
+                _read_pil_storage_image, photo.url, SIMULATION_SOURCE_MAX_SIDE
+            )
+            downloaded.append(image)
+            logger.info(
+                "Visagism simulation source loaded analysis=%s index=%s size=%sx%s",
+                analysis_id,
+                index,
+                image.width,
+                image.height,
+            )
+        except Exception as exc:
+            downloaded.append(exc)
+            logger.warning(
+                "Visagism simulation source load failed analysis=%s index=%s error=%s",
+                analysis_id,
+                index,
+                type(exc).__name__,
+            )
+
     original_image = (
         downloaded[0]
         if downloaded and not isinstance(downloaded[0], Exception)
@@ -541,10 +572,22 @@ async def simulate_visagism_haircut(
                 message="Simulation budget exhausted",
             )
 
+        logger.info(
+            "Visagism simulation preflight start analysis=%s haircut=%s refs=%s",
+            analysis_id,
+            request.haircut_name,
+            len(reference_images),
+        )
         preflight = await asyncio.to_thread(
             service.preflight,
             original_photo=original_image,
             real_reference_photos=reference_images,
+        )
+        logger.info(
+            "Visagism simulation preflight done analysis=%s eligible=%s reason=%s",
+            analysis_id,
+            bool(preflight.get("eligible")),
+            preflight.get("reason"),
         )
         if not preflight.get("eligible"):
             reason = str(preflight.get("reason") or "simulation_blocked")
@@ -561,6 +604,12 @@ async def simulate_visagism_haircut(
                 message="Simulation blocked safely",
             )
 
+        logger.info(
+            "Visagism simulation render start analysis=%s haircut=%s provider=%s",
+            analysis_id,
+            request.haircut_name,
+            runtime.provider,
+        )
         service_result = await asyncio.to_thread(
             service.simulate,
             original_photo=original_image,
@@ -571,6 +620,12 @@ async def simulate_visagism_haircut(
             denoising=SIMULATION_DENOISING,
             identity_weight=SIMULATION_IDENTITY_WEIGHT,
             preflight_result=preflight,
+        )
+        logger.info(
+            "Visagism simulation render done analysis=%s status=%s reason=%s",
+            analysis_id,
+            service_result.get("simulation_status"),
+            service_result.get("reason"),
         )
 
         if service_result.get("simulation_status") != "ready":
