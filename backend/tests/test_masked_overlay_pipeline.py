@@ -78,7 +78,7 @@ def test_renderer_receives_original_as_init_and_reference():
     assert renderer.last["mask"] == "hair-mask"
 
 
-def test_one_low_identity_reference_is_allowed_when_consensus_remains():
+def test_one_low_identity_reference_is_allowed_when_anchor_remains_strong():
     result = MaskedOverlayPipeline(MaskOK(), Renderer(), Verifier([0.95, 0.79, 0.94])).run(
         original_photo="original.jpg",
         real_reference_photos=["r1", "r2", "r3"],
@@ -91,8 +91,21 @@ def test_one_low_identity_reference_is_allowed_when_consensus_remains():
     assert result["identityScores"] == [0.95, 0.79, 0.94]
 
 
-def test_identity_consensus_failure_returns_original_photo():
+def test_single_strong_original_anchor_allows_weak_secondary_angles():
     result = MaskedOverlayPipeline(MaskOK(), Renderer(), Verifier([0.95, 0.79, 0.78])).run(
+        original_photo="original.jpg",
+        real_reference_photos=["r1", "r2", "r3"],
+        edit_instruction="hair only",
+    )
+    assert result["image"] == "candidate.jpg"
+    assert result["mode"] == "hair_overlay"
+    assert result["simulationApplied"] is True
+    assert result["identityVerified"] is True
+    assert result["identityScores"] == [0.95, 0.79, 0.78]
+
+
+def test_identity_anchor_failure_returns_original_photo():
+    result = MaskedOverlayPipeline(MaskOK(), Renderer(), Verifier([0.79, 0.78, 0.77])).run(
         original_photo="original.jpg",
         real_reference_photos=["r1", "r2", "r3"],
         edit_instruction="hair only",
@@ -103,7 +116,7 @@ def test_identity_consensus_failure_returns_original_photo():
         "simulationApplied": False,
         "reason": "identity_lock_failed",
         "baseImagePreserved": True,
-        "identity_scores": [0.95, 0.79, 0.78],
+        "identity_scores": [0.79, 0.78, 0.77],
     }
 
 
