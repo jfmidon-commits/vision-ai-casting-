@@ -1,4 +1,4 @@
-name: Black Diff Debug
+name: Black Autofix Debug
 
 on:
   push:
@@ -8,8 +8,11 @@ on:
       - 'backend/app/ai/visagism/adapters/mediapipe_hair_mask.py'
       - '.github/workflows/black-diff-debug.yml'
 
+permissions:
+  contents: write
+
 jobs:
-  black-diff:
+  black-autofix:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,4 +20,15 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install black==26.5.1
-      - run: black --diff --check backend/app/ai/visagism/adapters/mediapipe_hair_mask.py
+      - name: Format and commit
+        run: |
+          black backend/app/ai/visagism/adapters/mediapipe_hair_mask.py
+          if git diff --quiet; then
+            echo "Already formatted"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/app/ai/visagism/adapters/mediapipe_hair_mask.py
+          git commit -m "style: apply black to P1 mask adapter"
+          git push origin HEAD:fix/p1-memory-v2
