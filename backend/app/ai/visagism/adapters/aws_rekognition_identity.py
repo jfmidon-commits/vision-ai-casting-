@@ -57,7 +57,11 @@ class AWSRekognitionIdentityVerifier:
                 SourceImage={"Bytes": self._to_jpeg_bytes(reference)},
                 TargetImage={"Bytes": self._to_jpeg_bytes(candidate)},
                 SimilarityThreshold=0,
-                QualityFilter="AUTO",
+                # Do not let Rekognition's image-quality gate discard a valid
+                # real reference before our explicit identity consensus policy
+                # can evaluate it. Identity safety remains fail-closed in
+                # IdentityLockPolicy (threshold + minimum pass consensus).
+                QualityFilter="NONE",
             )
             matches = response.get("FaceMatches") or []
             if not matches:
