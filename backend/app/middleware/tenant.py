@@ -1,28 +1,22 @@
-from fastapi import Request, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from fastapi import Depends
 from uuid import UUID
 
-from app.database import get_db
-from app.models import Tenant
-
-async def tenant_middleware(request: Request, call_next):
-    tenant_id = request.headers.get("X-Tenant-ID")
-    if tenant_id:
-        request.state.tenant_id = tenant_id
-    response = await call_next(request)
-    return response
+from app.middleware.auth import get_current_user
+from app.models import User
 
 
-async def get_tenant_id(request: Request) -> UUID:
+async def get_tenant_id(current_user: User = Depends(get_current_user)) -> UUID:
     """
-    Dependency para extrair tenant_id do request state.
-    Usado pelos routers que precisam do tenant_id explicitamente.
+    Dependency que resolve o tenant_id do request.
+
+    O tenant_id e derivado EXCLUSIVAMENTE do usuario autenticado via JWT
+    (current_user.tenant_id) -- nunca de um header ou de qualquer outro
+    dado fornecido pelo cliente. Um header como "X-Tenant-ID" jamais deve
+    ser usado para autorizacao de tenant: um usuario autenticado poderia
+    simplesmente trocar o header e acessar dados de outro tenant (IDOR).
+
+    get_current_user ja exige um Bearer token valido (HTTPBearer e
+    obrigatorio por padrao), entao esta dependency tambem garante
+    autenticacao obrigatoria em qualquer endpoint que a utilize.
     """
-    tenant_id = request.state.tenant_id if hasattr(request.state, "tenant_id") else None
-    if not tenant_id:
-        raise HTTPException(status_code=400, detail="X-Tenant-ID header required")
-    try:
-        return UUID(tenant_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid X-Tenant-ID format")
+    return current_user.tenant_id
