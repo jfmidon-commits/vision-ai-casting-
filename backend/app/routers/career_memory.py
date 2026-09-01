@@ -12,9 +12,10 @@ Endpoints para gerenciar e consultar a memoria de carreira do talento:
 - Historico relevante (getRelevantHistory)
 """
 
-from typing import List, Optional, Dict, Any
-from uuid import UUID
 from datetime import date
+from typing import Any, Dict, List, Optional
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,20 +24,20 @@ from app.memory.career_memory_service import CareerMemoryService
 from app.middleware.auth import get_current_user
 from app.middleware.tenant import get_tenant_id
 from app.schemas.schemas import (
-    ProfessionalExperienceCreate,
-    ProfessionalExperienceResponse,
-    CharacterCreate,
-    CharacterResponse,
+    AppearanceRecordCreate,
+    AppearanceRecordResponse,
     CampaignCreate,
     CampaignResponse,
     CareerFeedbackCreate,
     CareerFeedbackResponse,
-    AppearanceRecordCreate,
-    AppearanceRecordResponse,
-    StylePreferenceCreate,
-    StylePreferenceResponse,
+    CharacterCreate,
+    CharacterResponse,
     ContentPerformanceCreate,
     ContentPerformanceResponse,
+    ProfessionalExperienceCreate,
+    ProfessionalExperienceResponse,
+    StylePreferenceCreate,
+    StylePreferenceResponse,
 )
 from app.utils.logger import get_logger
 

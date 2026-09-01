@@ -104,9 +104,10 @@ class AIService:
         analysis_types: List[str],
         tenant_id: str,
     ):
+        from sqlalchemy import and_, select
+
         from app.database import AsyncSessionLocal
         from app.models import Analysis, Photo
-        from sqlalchemy import and_, select
 
         # A previous analysis may have left native allocator arenas behind.
         _release_process_memory()

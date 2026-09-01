@@ -12,25 +12,26 @@ Responsavel por:
 - Gerar "Talent Graph" - grafo de relacionamentos do talento
 """
 
-from typing import Dict, List, Any, Optional
-from uuid import UUID
 from datetime import datetime
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, desc, func, or_
+from typing import Any, Dict, List, Optional
+from uuid import UUID
 
+from sqlalchemy import and_, desc, func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.event_bus import VisionEventType, emit_event
 from app.models import (
-    ProfessionalExperience,
-    Character,
-    Campaign,
     Agency,
     AgencyContact,
-    CareerFeedback,
     AppearanceRecord,
-    StylePreference,
+    Campaign,
+    CareerFeedback,
+    Character,
     ContentPerformance,
+    ProfessionalExperience,
     Profile,
+    StylePreference,
 )
-from app.core.event_bus import emit_event, VisionEventType
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)

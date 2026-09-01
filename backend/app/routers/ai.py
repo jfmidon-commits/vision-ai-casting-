@@ -10,7 +10,7 @@ from app.core.websocket import manager
 from app.database import AsyncSessionLocal, get_db
 from app.middleware.auth import get_current_user
 from app.models import Analysis, Photo, Photoshoot
-from app.schemas import APIResponse, AnalysisCreate, AnalysisProgress
+from app.schemas import AnalysisCreate, AnalysisProgress, APIResponse
 from app.services.ai_service import AIService
 from app.utils.logger import get_logger
 
