@@ -106,14 +106,22 @@ class AIService:
     ):
         from app.database import AsyncSessionLocal
         from app.models import Analysis, Photo
-        from sqlalchemy import select
+        from sqlalchemy import and_, select
 
         # A previous analysis may have left native allocator arenas behind.
         _release_process_memory()
         log_rss("analysis_start_after_gc", analysis_id)
 
         async with AsyncSessionLocal() as db:
-            result = await db.execute(select(Analysis).where(Analysis.id == analysis_id))
+            result = await db.execute(
+                select(Analysis).where(
+                    and_(
+                        Analysis.id == analysis_id,
+                        Analysis.photoshoot_id == photoshoot_id,
+                        Analysis.tenant_id == tenant_id,
+                    )
+                )
+            )
             analysis = result.scalar_one()
             analysis.status = "processing"
             await db.commit()
@@ -121,7 +129,12 @@ class AIService:
             start_time = time.time()
 
             result = await db.execute(
-                select(Photo).where(Photo.photoshoot_id == photoshoot_id)
+                select(Photo).where(
+                    and_(
+                        Photo.photoshoot_id == photoshoot_id,
+                        Photo.tenant_id == tenant_id,
+                    )
+                )
             )
             photos = result.scalars().all()
 

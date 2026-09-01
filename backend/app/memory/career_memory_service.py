@@ -117,6 +117,7 @@ class CareerMemoryService:
         self,
         db: AsyncSession,
         profile_id: UUID,
+        tenant_id: UUID,
         production_type: str,
     ) -> List[ProfessionalExperience]:
         """Filtra experiencias por tipo (film, series, commercial, etc)."""
@@ -125,6 +126,7 @@ class CareerMemoryService:
             .where(
                 and_(
                     ProfessionalExperience.profile_id == profile_id,
+                    ProfessionalExperience.tenant_id == tenant_id,
                     ProfessionalExperience.production_type == production_type,
                     ProfessionalExperience.status == "active",
                 )
@@ -222,6 +224,7 @@ class CareerMemoryService:
         self,
         db: AsyncSession,
         profile_id: UUID,
+        tenant_id: UUID,
         archetype: str,
     ) -> List[Character]:
         """Busca personagens por arquetipo."""
@@ -230,6 +233,7 @@ class CareerMemoryService:
             .where(
                 and_(
                     Character.profile_id == profile_id,
+                    Character.tenant_id == tenant_id,
                     Character.archetype == archetype,
                     Character.status == "active",
                 )

@@ -85,7 +85,10 @@ async def get_experiences(
     """Lista experiencias profissionais de um perfil."""
     if production_type:
         experiences = await career_service.get_experiences_by_type(
-            db=db, profile_id=profile_id, production_type=production_type
+            db=db,
+            profile_id=profile_id,
+            tenant_id=tenant_id,
+            production_type=production_type,
         )
     else:
         experiences = await career_service.get_experiences(
@@ -144,7 +147,10 @@ async def get_characters(
     """Lista personagens de um perfil."""
     if archetype:
         characters = await career_service.get_character_by_archetype(
-            db=db, profile_id=profile_id, archetype=archetype
+            db=db,
+            profile_id=profile_id,
+            tenant_id=tenant_id,
+            archetype=archetype,
         )
     else:
         characters = await career_service.get_characters(
