@@ -19,10 +19,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, desc, func, or_
 
 from app.models import (
-    ProfessionalExperience, Character, Campaign,
-    Agency, AgencyContact, CareerFeedback,
-    AppearanceRecord, StylePreference, ContentPerformance,
-    Profile
+    ProfessionalExperience,
+    Character,
+    Campaign,
+    Agency,
+    AgencyContact,
+    CareerFeedback,
+    AppearanceRecord,
+    StylePreference,
+    ContentPerformance,
+    Profile,
 )
 from app.core.event_bus import emit_event, VisionEventType
 from app.utils.logger import get_logger
@@ -86,7 +92,11 @@ class CareerMemoryService:
 
         await emit_event(
             event_type=VisionEventType.PROFILE_UPDATED,
-            payload={"profile_id": str(profile_id), "action": "experience_added", "experience_id": str(experience.id)},
+            payload={
+                "profile_id": str(profile_id),
+                "action": "experience_added",
+                "experience_id": str(experience.id),
+            },
         )
         logger.info(f"Experience created: {experience.id} for profile {profile_id}")
         return experience
@@ -194,7 +204,11 @@ class CareerMemoryService:
 
         await emit_event(
             event_type=VisionEventType.DIGITAL_TWIN_UPDATED,
-            payload={"profile_id": str(profile_id), "action": "character_added", "character_id": str(character.id)},
+            payload={
+                "profile_id": str(profile_id),
+                "action": "character_added",
+                "character_id": str(character.id),
+            },
         )
         logger.info(f"Character created: {character.id} for profile {profile_id}")
         return character
@@ -229,8 +243,7 @@ class CareerMemoryService:
     ) -> List[Character]:
         """Busca personagens por arquetipo."""
         result = await db.execute(
-            select(Character)
-            .where(
+            select(Character).where(
                 and_(
                     Character.profile_id == profile_id,
                     Character.tenant_id == tenant_id,
@@ -438,7 +451,9 @@ class CareerMemoryService:
         if feedback_type:
             query = query.where(CareerFeedback.feedback_type == feedback_type)
         if is_positive is not None:
-            query = query.where(CareerFeedback.is_positive == ("true" if is_positive else "false"))
+            query = query.where(
+                CareerFeedback.is_positive == ("true" if is_positive else "false")
+            )
 
         result = await db.execute(query.order_by(desc(CareerFeedback.created_at)))
         return result.scalars().all()
@@ -627,7 +642,9 @@ class CareerMemoryService:
         if best_performing_only:
             query = query.where(ContentPerformance.best_performing == "true")
 
-        result = await db.execute(query.order_by(desc(ContentPerformance.engagement_rate)))
+        result = await db.execute(
+            query.order_by(desc(ContentPerformance.engagement_rate))
+        )
         return result.scalars().all()
 
     # ========== TALENT GRAPH: CONSULTA INTEGRADA (ETAPA 1) ==========
@@ -648,7 +665,13 @@ class CareerMemoryService:
         Retorna resultados agrupados por tipo de entidade com relevancia.
         """
         search_term = f"%{query.lower()}%"
-        entity_types = entity_types or ["experiences", "characters", "campaigns", "feedbacks", "appearances"]
+        entity_types = entity_types or [
+            "experiences",
+            "characters",
+            "campaigns",
+            "feedbacks",
+            "appearances",
+        ]
         results = {
             "query": query,
             "profile_id": str(profile_id),
@@ -667,14 +690,26 @@ class CareerMemoryService:
                         ProfessionalExperience.status == "active",
                         or_(
                             func.lower(ProfessionalExperience.title).like(search_term),
-                            func.lower(ProfessionalExperience.company).like(search_term),
-                            func.lower(ProfessionalExperience.project_name).like(search_term),
+                            func.lower(ProfessionalExperience.company).like(
+                                search_term
+                            ),
+                            func.lower(ProfessionalExperience.project_name).like(
+                                search_term
+                            ),
                             func.lower(ProfessionalExperience.role).like(search_term),
-                            func.lower(ProfessionalExperience.character_name).like(search_term),
-                            func.lower(ProfessionalExperience.description).like(search_term),
-                            func.lower(ProfessionalExperience.director).like(search_term),
+                            func.lower(ProfessionalExperience.character_name).like(
+                                search_term
+                            ),
+                            func.lower(ProfessionalExperience.description).like(
+                                search_term
+                            ),
+                            func.lower(ProfessionalExperience.director).like(
+                                search_term
+                            ),
                             func.lower(ProfessionalExperience.agency).like(search_term),
-                            func.lower(ProfessionalExperience.production_type).like(search_term),
+                            func.lower(ProfessionalExperience.production_type).like(
+                                search_term
+                            ),
                         ),
                     )
                 )
@@ -692,9 +727,15 @@ class CareerMemoryService:
                         "role": e.role,
                         "character_name": e.character_name,
                         "production_type": e.production_type,
-                        "start_date": e.start_date.isoformat() if e.start_date else None,
+                        "start_date": (
+                            e.start_date.isoformat() if e.start_date else None
+                        ),
                         "description": e.description,
-                        "relevance": "high" if query.lower() in (e.title or "").lower() else "medium",
+                        "relevance": (
+                            "high"
+                            if query.lower() in (e.title or "").lower()
+                            else "medium"
+                        ),
                     }
                     for e in experiences
                 ]
@@ -712,8 +753,12 @@ class CareerMemoryService:
                         or_(
                             func.lower(Character.name).like(search_term),
                             func.lower(Character.archetype).like(search_term),
-                            func.lower(Character.physical_description).like(search_term),
-                            func.lower(Character.wardrobe_description).like(search_term),
+                            func.lower(Character.physical_description).like(
+                                search_term
+                            ),
+                            func.lower(Character.wardrobe_description).like(
+                                search_term
+                            ),
                             func.lower(Character.makeup_description).like(search_term),
                             func.lower(Character.hair_description).like(search_term),
                             func.lower(Character.profession).like(search_term),
@@ -733,7 +778,11 @@ class CareerMemoryService:
                         "age_range": c.age_range,
                         "gender_presentation": c.gender_presentation,
                         "is_simulated": c.is_simulated == "true",
-                        "relevance": "high" if query.lower() in (c.name or "").lower() else "medium",
+                        "relevance": (
+                            "high"
+                            if query.lower() in (c.name or "").lower()
+                            else "medium"
+                        ),
                     }
                     for c in characters
                 ]
@@ -769,8 +818,14 @@ class CareerMemoryService:
                         "brand": c.brand,
                         "agency": c.agency,
                         "campaign_type": c.campaign_type,
-                        "start_date": c.start_date.isoformat() if c.start_date else None,
-                        "relevance": "high" if query.lower() in (c.name or "").lower() else "medium",
+                        "start_date": (
+                            c.start_date.isoformat() if c.start_date else None
+                        ),
+                        "relevance": (
+                            "high"
+                            if query.lower() in (c.name or "").lower()
+                            else "medium"
+                        ),
                     }
                     for c in campaigns
                 ]
@@ -806,7 +861,11 @@ class CareerMemoryService:
                         "feedback_text": f.feedback_text,
                         "rating": float(f.rating) if f.rating else None,
                         "is_positive": f.is_positive == "true",
-                        "relevance": "high" if query.lower() in (f.feedback_text or "").lower() else "medium",
+                        "relevance": (
+                            "high"
+                            if query.lower() in (f.feedback_text or "").lower()
+                            else "medium"
+                        ),
                     }
                     for f in feedbacks
                 ]
@@ -843,13 +902,19 @@ class CareerMemoryService:
                         "feedback": a.feedback,
                         "rating": float(a.rating) if a.rating else None,
                         "tags": a.tags,
-                        "relevance": "high" if query.lower() in (a.title or "").lower() else "medium",
+                        "relevance": (
+                            "high"
+                            if query.lower() in (a.title or "").lower()
+                            else "medium"
+                        ),
                     }
                     for a in appearances
                 ]
                 results["total_results"] += len(appearances)
 
-        logger.info(f"searchMemory: query='{query}' found {results['total_results']} results for profile {profile_id}")
+        logger.info(
+            f"searchMemory: query='{query}' found {results['total_results']} results for profile {profile_id}"
+        )
         return results
 
     async def getTalentContext(
@@ -932,7 +997,9 @@ class CareerMemoryService:
         ]
 
         # 3. Personagens
-        characters = await self.get_characters(db, profile_id, tenant_id, include_simulated=True)
+        characters = await self.get_characters(
+            db, profile_id, tenant_id, include_simulated=True
+        )
         context["characters"] = [
             {
                 "id": str(c.id),
@@ -993,7 +1060,9 @@ class CareerMemoryService:
                 "agency_type": a.type,
                 "contact_type": ac.contact_type,
                 "contract_type": ac.contract_type,
-                "commission_rate": float(ac.commission_rate) if ac.commission_rate else None,
+                "commission_rate": (
+                    float(ac.commission_rate) if ac.commission_rate else None
+                ),
                 "start_date": ac.start_date.isoformat() if ac.start_date else None,
                 "city": a.city,
                 "country": a.country,
@@ -1032,13 +1101,22 @@ class CareerMemoryService:
 
         # Sumario de feedbacks
         if all_feedbacks:
-            avg_rating = sum(float(f.rating) for f in all_feedbacks if f.rating) / len([f for f in all_feedbacks if f.rating]) if [f for f in all_feedbacks if f.rating] else 0
+            avg_rating = (
+                sum(float(f.rating) for f in all_feedbacks if f.rating)
+                / len([f for f in all_feedbacks if f.rating])
+                if [f for f in all_feedbacks if f.rating]
+                else 0
+            )
             context["feedbacks"]["summary"] = {
                 "total_count": len(all_feedbacks),
                 "positive_count": len(positive_feedbacks),
                 "negative_count": len(negative_feedbacks),
                 "average_rating": round(avg_rating, 2),
-                "positive_ratio": round(len(positive_feedbacks) / len(all_feedbacks), 2) if all_feedbacks else 0,
+                "positive_ratio": (
+                    round(len(positive_feedbacks) / len(all_feedbacks), 2)
+                    if all_feedbacks
+                    else 0
+                ),
             }
 
         # 7. Aparicoes
@@ -1089,7 +1167,9 @@ class CareerMemoryService:
                 "id": str(p.id),
                 "platform": p.platform,
                 "metrics": p.metrics or {},
-                "engagement_rate": float(p.engagement_rate) if p.engagement_rate else None,
+                "engagement_rate": (
+                    float(p.engagement_rate) if p.engagement_rate else None
+                ),
                 "best_performing": p.best_performing == "true",
                 "audience_demographics": p.audience_demographics or {},
                 "peak_hours": p.peak_hours or [],
@@ -1105,7 +1185,7 @@ class CareerMemoryService:
 
         top_skills = {}
         for e in experiences:
-            for skill in (e.skills_used or []):
+            for skill in e.skills_used or []:
                 top_skills[skill] = top_skills.get(skill, 0) + 1
 
         context["career_summary"] = {
@@ -1116,20 +1196,32 @@ class CareerMemoryService:
             "total_approved_appearances": len(approved),
             "total_rejected_appearances": len(rejected),
             "production_types_breakdown": production_types,
-            "top_skills": dict(sorted(top_skills.items(), key=lambda x: x[1], reverse=True)[:10]),
+            "top_skills": dict(
+                sorted(top_skills.items(), key=lambda x: x[1], reverse=True)[:10]
+            ),
             "years_active": self._calculate_years_active(experiences),
             "featured_works": len([e for e in experiences if e.is_featured == "true"]),
         }
 
         # Talent Graph — relacoes
         context["talent_graph"] = {
-            "frequent_directors": list(set(e.director for e in experiences if e.director))[:10],
-            "frequent_agencies": list(set(e.agency for e in experiences if e.agency))[:10],
-            "character_archetypes": list(set(c.archetype for c in characters if c.archetype))[:10],
-            "worked_locations": list(set(e.location for e in experiences if e.location))[:10],
+            "frequent_directors": list(
+                set(e.director for e in experiences if e.director)
+            )[:10],
+            "frequent_agencies": list(set(e.agency for e in experiences if e.agency))[
+                :10
+            ],
+            "character_archetypes": list(
+                set(c.archetype for c in characters if c.archetype)
+            )[:10],
+            "worked_locations": list(
+                set(e.location for e in experiences if e.location)
+            )[:10],
         }
 
-        logger.info(f"getTalentContext: generated full context for profile {profile_id}")
+        logger.info(
+            f"getTalentContext: generated full context for profile {profile_id}"
+        )
         return context
 
     async def getRelevantHistory(
@@ -1162,50 +1254,66 @@ class CareerMemoryService:
         }
 
         if context == "casting":
-            experiences = await self.get_experiences(db, profile_id, tenant_id, limit=limit)
+            experiences = await self.get_experiences(
+                db, profile_id, tenant_id, limit=limit
+            )
             for exp in experiences:
                 relevance_score = 0
                 if keywords_lower:
                     for kw in keywords_lower:
-                        if kw in (exp.title or "").lower(): relevance_score += 3
-                        if kw in (exp.production_type or "").lower(): relevance_score += 2
-                        if kw in (exp.role or "").lower(): relevance_score += 2
-                        if kw in (exp.description or "").lower(): relevance_score += 1
+                        if kw in (exp.title or "").lower():
+                            relevance_score += 3
+                        if kw in (exp.production_type or "").lower():
+                            relevance_score += 2
+                        if kw in (exp.role or "").lower():
+                            relevance_score += 2
+                        if kw in (exp.description or "").lower():
+                            relevance_score += 1
 
                 if relevance_score > 0 or not keywords_lower:
-                    result["relevant_items"].append({
-                        "type": "experience",
-                        "id": str(exp.id),
-                        "title": exp.title,
-                        "role": exp.role,
-                        "production_type": exp.production_type,
-                        "relevance_score": relevance_score,
-                        "reason": f"Experiencia em {exp.production_type}" if exp.production_type else "Experiencia profissional",
-                    })
+                    result["relevant_items"].append(
+                        {
+                            "type": "experience",
+                            "id": str(exp.id),
+                            "title": exp.title,
+                            "role": exp.role,
+                            "production_type": exp.production_type,
+                            "relevance_score": relevance_score,
+                            "reason": (
+                                f"Experiencia em {exp.production_type}"
+                                if exp.production_type
+                                else "Experiencia profissional"
+                            ),
+                        }
+                    )
 
             feedbacks = await self.get_feedbacks(db, profile_id, tenant_id)
             for fb in feedbacks:
                 if fb.feedback_type in ["appearance", "performance", "professionalism"]:
-                    result["relevant_items"].append({
-                        "type": "feedback",
-                        "id": str(fb.id),
-                        "source": fb.source_name,
-                        "feedback_type": fb.feedback_type,
-                        "is_positive": fb.is_positive == "true",
-                        "relevance_score": 2 if fb.is_positive == "true" else 1,
-                        "reason": f"Feedback de {fb.feedback_type}",
-                    })
+                    result["relevant_items"].append(
+                        {
+                            "type": "feedback",
+                            "id": str(fb.id),
+                            "source": fb.source_name,
+                            "feedback_type": fb.feedback_type,
+                            "is_positive": fb.is_positive == "true",
+                            "relevance_score": 2 if fb.is_positive == "true" else 1,
+                            "reason": f"Feedback de {fb.feedback_type}",
+                        }
+                    )
 
             approved = await self.get_approved_appearances(db, profile_id, tenant_id)
             for app in approved[:5]:
-                result["relevant_items"].append({
-                    "type": "approved_appearance",
-                    "id": str(app.id),
-                    "title": app.title,
-                    "tags": app.tags or [],
-                    "relevance_score": 2,
-                    "reason": "Aparicao aprovada anteriormente",
-                })
+                result["relevant_items"].append(
+                    {
+                        "type": "approved_appearance",
+                        "id": str(app.id),
+                        "title": app.title,
+                        "tags": app.tags or [],
+                        "relevance_score": 2,
+                        "reason": "Aparicao aprovada anteriormente",
+                    }
+                )
 
             result["insights"] = [
                 f"Talento tem {len(experiences)} experiencias profissionais",
@@ -1214,38 +1322,54 @@ class CareerMemoryService:
             ]
 
         elif context == "character":
-            characters = await self.get_characters(db, profile_id, tenant_id, include_simulated=True)
+            characters = await self.get_characters(
+                db, profile_id, tenant_id, include_simulated=True
+            )
             for char in characters:
                 relevance_score = 0
                 if keywords_lower:
                     for kw in keywords_lower:
-                        if kw in (char.name or "").lower(): relevance_score += 3
-                        if kw in (char.archetype or "").lower(): relevance_score += 2
-                        if kw in (char.physical_description or "").lower(): relevance_score += 1
-                        if kw in (char.profession or "").lower(): relevance_score += 1
+                        if kw in (char.name or "").lower():
+                            relevance_score += 3
+                        if kw in (char.archetype or "").lower():
+                            relevance_score += 2
+                        if kw in (char.physical_description or "").lower():
+                            relevance_score += 1
+                        if kw in (char.profession or "").lower():
+                            relevance_score += 1
 
                 if relevance_score > 0 or not keywords_lower:
-                    result["relevant_items"].append({
-                        "type": "character",
-                        "id": str(char.id),
-                        "name": char.name,
-                        "archetype": char.archetype,
-                        "is_simulated": char.is_simulated == "true",
-                        "relevance_score": relevance_score,
-                        "reason": f"Personagem tipo {char.archetype}" if char.archetype else "Personagem registrado",
-                    })
+                    result["relevant_items"].append(
+                        {
+                            "type": "character",
+                            "id": str(char.id),
+                            "name": char.name,
+                            "archetype": char.archetype,
+                            "is_simulated": char.is_simulated == "true",
+                            "relevance_score": relevance_score,
+                            "reason": (
+                                f"Personagem tipo {char.archetype}"
+                                if char.archetype
+                                else "Personagem registrado"
+                            ),
+                        }
+                    )
 
-            experiences = await self.get_experiences(db, profile_id, tenant_id, limit=limit)
+            experiences = await self.get_experiences(
+                db, profile_id, tenant_id, limit=limit
+            )
             for exp in experiences:
                 if exp.character_name:
-                    result["relevant_items"].append({
-                        "type": "experience_with_character",
-                        "id": str(exp.id),
-                        "title": exp.title,
-                        "character_name": exp.character_name,
-                        "relevance_score": 2,
-                        "reason": f"Interpretou {exp.character_name}",
-                    })
+                    result["relevant_items"].append(
+                        {
+                            "type": "experience_with_character",
+                            "id": str(exp.id),
+                            "title": exp.title,
+                            "character_name": exp.character_name,
+                            "relevance_score": 2,
+                            "reason": f"Interpretou {exp.character_name}",
+                        }
+                    )
 
             result["insights"] = [
                 f"Talento tem {len(characters)} personagens registrados",
@@ -1258,31 +1382,48 @@ class CareerMemoryService:
                 relevance_score = 0
                 if keywords_lower:
                     for kw in keywords_lower:
-                        if kw in (camp.name or "").lower(): relevance_score += 3
-                        if kw in (camp.brand or "").lower(): relevance_score += 2
-                        if kw in (camp.campaign_type or "").lower(): relevance_score += 2
+                        if kw in (camp.name or "").lower():
+                            relevance_score += 3
+                        if kw in (camp.brand or "").lower():
+                            relevance_score += 2
+                        if kw in (camp.campaign_type or "").lower():
+                            relevance_score += 2
 
                 if relevance_score > 0 or not keywords_lower:
-                    result["relevant_items"].append({
-                        "type": "campaign",
-                        "id": str(camp.id),
-                        "name": camp.name,
-                        "brand": camp.brand,
-                        "campaign_type": camp.campaign_type,
-                        "relevance_score": relevance_score,
-                        "reason": f"Campanha {camp.campaign_type}" if camp.campaign_type else "Campanha registrada",
-                    })
+                    result["relevant_items"].append(
+                        {
+                            "type": "campaign",
+                            "id": str(camp.id),
+                            "name": camp.name,
+                            "brand": camp.brand,
+                            "campaign_type": camp.campaign_type,
+                            "relevance_score": relevance_score,
+                            "reason": (
+                                f"Campanha {camp.campaign_type}"
+                                if camp.campaign_type
+                                else "Campanha registrada"
+                            ),
+                        }
+                    )
 
-            performances = await self.get_content_performances(db, profile_id, tenant_id, best_performing_only=True)
+            performances = await self.get_content_performances(
+                db, profile_id, tenant_id, best_performing_only=True
+            )
             for perf in performances[:5]:
-                result["relevant_items"].append({
-                    "type": "content_performance",
-                    "id": str(perf.id),
-                    "platform": perf.platform,
-                    "engagement_rate": float(perf.engagement_rate) if perf.engagement_rate else None,
-                    "relevance_score": 3,
-                    "reason": "Melhor performance de conteudo",
-                })
+                result["relevant_items"].append(
+                    {
+                        "type": "content_performance",
+                        "id": str(perf.id),
+                        "platform": perf.platform,
+                        "engagement_rate": (
+                            float(perf.engagement_rate)
+                            if perf.engagement_rate
+                            else None
+                        ),
+                        "relevance_score": 3,
+                        "reason": "Melhor performance de conteudo",
+                    }
+                )
 
             result["insights"] = [
                 f"Talento participou de {len(campaigns)} campanhas",
@@ -1292,28 +1433,44 @@ class CareerMemoryService:
         elif context == "content":
             style_prefs = await self.get_style_preferences(db, profile_id, tenant_id)
             for pref in style_prefs:
-                result["relevant_items"].append({
-                    "type": "style_preference",
-                    "id": str(pref.id),
-                    "preference_type": pref.preference_type,
-                    "preference_value": pref.preference_value,
-                    "usage_count": pref.usage_count,
-                    "success_rate": float(pref.success_rate) if pref.success_rate else None,
-                    "relevance_score": pref.usage_count or 1,
-                    "reason": f"Preferencia de {pref.preference_type} (usada {pref.usage_count}x)",
-                })
+                result["relevant_items"].append(
+                    {
+                        "type": "style_preference",
+                        "id": str(pref.id),
+                        "preference_type": pref.preference_type,
+                        "preference_value": pref.preference_value,
+                        "usage_count": pref.usage_count,
+                        "success_rate": (
+                            float(pref.success_rate) if pref.success_rate else None
+                        ),
+                        "relevance_score": pref.usage_count or 1,
+                        "reason": f"Preferencia de {pref.preference_type} (usada {pref.usage_count}x)",
+                    }
+                )
 
-            performances = await self.get_content_performances(db, profile_id, tenant_id)
+            performances = await self.get_content_performances(
+                db, profile_id, tenant_id
+            )
             for perf in performances[:10]:
-                result["relevant_items"].append({
-                    "type": "content_performance",
-                    "id": str(perf.id),
-                    "platform": perf.platform,
-                    "metrics": perf.metrics,
-                    "engagement_rate": float(perf.engagement_rate) if perf.engagement_rate else None,
-                    "relevance_score": int((perf.engagement_rate or 0) * 100),
-                    "reason": f"Engagement rate: {perf.engagement_rate}%" if perf.engagement_rate else "Performance registrada",
-                })
+                result["relevant_items"].append(
+                    {
+                        "type": "content_performance",
+                        "id": str(perf.id),
+                        "platform": perf.platform,
+                        "metrics": perf.metrics,
+                        "engagement_rate": (
+                            float(perf.engagement_rate)
+                            if perf.engagement_rate
+                            else None
+                        ),
+                        "relevance_score": int((perf.engagement_rate or 0) * 100),
+                        "reason": (
+                            f"Engagement rate: {perf.engagement_rate}%"
+                            if perf.engagement_rate
+                            else "Performance registrada"
+                        ),
+                    }
+                )
 
             result["insights"] = [
                 f"Talento tem {len(style_prefs)} preferencias de estilo registradas",
@@ -1321,10 +1478,14 @@ class CareerMemoryService:
             ]
 
         # Ordenar por relevance_score
-        result["relevant_items"].sort(key=lambda x: x.get("relevance_score", 0), reverse=True)
+        result["relevant_items"].sort(
+            key=lambda x: x.get("relevance_score", 0), reverse=True
+        )
         result["relevant_items"] = result["relevant_items"][:limit]
 
-        logger.info(f"getRelevantHistory: context='{context}' found {len(result['relevant_items'])} items for profile {profile_id}")
+        logger.info(
+            f"getRelevantHistory: context='{context}' found {len(result['relevant_items'])} items for profile {profile_id}"
+        )
         return result
 
     def _calculate_years_active(self, experiences: List[ProfessionalExperience]) -> int:
@@ -1403,7 +1564,11 @@ class CareerMemoryService:
             result = await self.create_content_performance(
                 db=db, tenant_id=tenant_id, profile_id=profile_id, **data
             )
-            return {"type": "content_performance", "id": str(result.id), "created": True}
+            return {
+                "type": "content_performance",
+                "id": str(result.id),
+                "created": True,
+            }
 
         else:
             raise ValueError(f"Unknown memory_type: {memory_type}")
@@ -1465,7 +1630,11 @@ class CareerMemoryService:
                 related_casting_id=casting_id,
                 is_positive=(outcome == "success"),
                 action_taken=details.get("action_taken"),
-                metadata={"result_type": result_type, "outcome": outcome, "details": details},
+                metadata={
+                    "result_type": result_type,
+                    "outcome": outcome,
+                    "details": details,
+                },
             )
 
         await emit_event(
@@ -1479,7 +1648,9 @@ class CareerMemoryService:
             },
         )
 
-        logger.info(f"registerProfessionalResult: {result_type} -> {outcome} for profile {profile_id}")
+        logger.info(
+            f"registerProfessionalResult: {result_type} -> {outcome} for profile {profile_id}"
+        )
 
         return {
             "registered": True,

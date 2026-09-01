@@ -53,7 +53,9 @@ async def _mark_analysis_failed(
             analysis.completed_at = datetime.utcnow()
             await db.commit()
     except Exception:
-        logger.exception("Failed to persist terminal state for analysis %s", analysis_id)
+        logger.exception(
+            "Failed to persist terminal state for analysis %s", analysis_id
+        )
 
 
 async def _run_analysis_safely(
@@ -81,7 +83,9 @@ async def _run_analysis_safely(
         logger.info("Analysis %s background pipeline completed", analysis_id)
     except asyncio.TimeoutError:
         message = f"analysis_timeout_after_{ANALYSIS_TIMEOUT_SECONDS}s"
-        logger.error("Analysis %s timed out after %ss", analysis_id, ANALYSIS_TIMEOUT_SECONDS)
+        logger.error(
+            "Analysis %s timed out after %ss", analysis_id, ANALYSIS_TIMEOUT_SECONDS
+        )
         await _mark_analysis_failed(analysis_id, message, tenant_id)
     except Exception as exc:
         message = f"{type(exc).__name__}: {exc}"
