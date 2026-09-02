@@ -11,10 +11,10 @@ Responsabilidades:
 """
 
 import asyncio
-import json
 import time
-from typing import Dict, List, Any, Optional, Set
 from collections import defaultdict
+from typing import Any, Dict, List, Optional, Set
+
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
@@ -143,7 +143,14 @@ class ConnectionManager:
                 self.active_connections[channel].pop(connection_id, None)
                 if not self.active_connections[channel]:
                     del self.active_connections[channel]
-            self.connection_channels[connection_id].discard(channel)
+            channels = self.connection_channels.get(connection_id)
+            if channels is not None:
+                channels.discard(channel)
+                if not channels:
+                    self.connection_channels.pop(connection_id, None)
+                    self.connection_metadata.pop(connection_id, None)
+                    self.last_ping.pop(connection_id, None)
+                    self.message_history.pop(connection_id, None)
         else:
             # Desconectar de todos os canais
             channels = list(self.connection_channels.get(connection_id, []))
@@ -587,6 +594,6 @@ async def websocket_endpoint_handler(
 
     except WebSocketDisconnect:
         manager.disconnect(connection_id)
-    except Exception as e:
+    except Exception:
         manager.disconnect(connection_id)
         raise
