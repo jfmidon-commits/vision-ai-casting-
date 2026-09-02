@@ -1,38 +1,95 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { analysisApi, photoshootApi, profileApi, reportApi } from "@/lib/api";
 import { Users, Camera, Brain, FileText } from "lucide-react";
 
-const stats = [
-  { name: "Total de Perfis", value: "124", icon: Users, change: "+12%" },
-  { name: "Ensaios este mês", value: "38", icon: Camera, change: "+8%" },
-  { name: "Análises de IA", value: "256", icon: Brain, change: "+24%" },
-  { name: "Relatórios gerados", value: "89", icon: FileText, change: "+15%" },
-];
+type CollectionResponse = { data?: unknown[]; total?: number };
+type DashboardData = {
+  profiles: CollectionResponse;
+  photoshoots: CollectionResponse;
+  analyses: CollectionResponse;
+  reports: CollectionResponse;
+};
 
-const recentActivity = [
-  { id: 1, action: "Análise completada", subject: "João Silva", time: "2 min atrás", type: "success" },
-  { id: 2, action: "Novo perfil criado", subject: "Maria Santos", time: "15 min atrás", type: "info" },
-  { id: 3, action: "Relatório PDF gerado", subject: "Pedro Costa", time: "1h atrás", type: "success" },
-  { id: 4, action: "Ensaio finalizado", subject: "Ana Oliveira", time: "2h atrás", type: "info" },
-];
+const emptyData: DashboardData = {
+  profiles: {},
+  photoshoots: {},
+  analyses: {},
+  reports: {},
+};
+const count = (collection: CollectionResponse) =>
+  collection.total ?? collection.data?.length ?? 0;
 
 export default function DashboardPage() {
+  const [dashboard, setDashboard] = useState<DashboardData>(emptyData);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    async function loadDashboard() {
+      setLoading(true);
+      setError("");
+      try {
+        const params = { page: 1, per_page: 5 };
+        const [profiles, photoshoots, analyses, reports] = await Promise.all([
+          profileApi.list(params),
+          photoshootApi.list(params),
+          analysisApi.list(params),
+          reportApi.list(params),
+        ]);
+        if (!active) return;
+        setDashboard({
+          profiles: profiles.data,
+          photoshoots: photoshoots.data,
+          analyses: analyses.data,
+          reports: reports.data,
+        });
+      } catch {
+        if (active) setError("Não foi possível carregar o resumo agora.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    void loadDashboard();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const stats = useMemo(
+    () => [
+      { name: "Total de Perfis", value: count(dashboard.profiles), icon: Users },
+      { name: "Ensaios", value: count(dashboard.photoshoots), icon: Camera },
+      { name: "Análises de IA", value: count(dashboard.analyses), icon: Brain },
+      { name: "Relatórios", value: count(dashboard.reports), icon: FileText },
+    ],
+    [dashboard]
+  );
+
   return (
     <DashboardShell>
       <div className="space-y-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-            <p className="text-muted-foreground">Visão geral da sua agência</p>
+            <p className="text-muted-foreground">Dados reais da sua agência</p>
           </div>
           <Link href="/profiles">
             <Button className="w-full sm:w-auto">Novo Perfil</Button>
           </Link>
         </div>
+
+        {error ? (
+          <p className="rounded-md border border-destructive/30 p-3 text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {stats.map((stat) => {
@@ -44,53 +101,37 @@ export default function DashboardPage() {
                   <Icon className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{stat.value}</div>
-                  <p className="text-xs text-muted-foreground">
-                    <span className="text-green-600">{stat.change}</span> vs mês anterior
-                  </p>
+                  <div className="text-2xl font-bold">
+                    {loading ? "—" : stat.value}
+                  </div>
+                  <p className="text-xs text-muted-foreground">visível para o seu tenant</p>
                 </CardContent>
               </Card>
             );
           })}
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <Card>
-            <CardHeader><CardTitle>Atividade Recente</CardTitle></CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {recentActivity.map((activity) => (
-                  <div key={activity.id} className="flex items-center gap-4">
-                    <div className={`h-2 w-2 rounded-full ${activity.type === "success" ? "bg-green-500" : "bg-blue-500"}`} />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">{activity.action}</p>
-                      <p className="text-xs text-muted-foreground">{activity.subject}</p>
-                    </div>
-                    <span className="text-xs text-muted-foreground">{activity.time}</span>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader><CardTitle>Uso do Plano</CardTitle></CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {[
-                  ["Perfis", "124 / 500", "25%"],
-                  ["Análises", "256 / 1000", "26%"],
-                  ["Armazenamento", "45GB / 100GB", "45%"],
-                ].map(([label, value, width]) => (
-                  <div key={label}>
-                    <div className="flex justify-between text-sm"><span>{label}</span><span className="font-medium">{value}</span></div>
-                    <div className="mt-2 h-2 rounded-full bg-secondary"><div className="h-2 rounded-full bg-primary" style={{ width }} /></div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Atalhos</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              ["/profiles", "Gerenciar perfis"],
+              ["/photoshoots", "Gerenciar ensaios"],
+              ["/visagism", "Nova análise"],
+              ["/reports", "Ver relatórios"],
+            ].map(([href, label]) => (
+              <Link
+                key={href}
+                href={href}
+                className="inline-flex h-10 items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
+              >
+                {label}
+              </Link>
+            ))}
+          </CardContent>
+        </Card>
       </div>
     </DashboardShell>
   );
