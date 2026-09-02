@@ -116,18 +116,20 @@ export default function DashboardPage() {
             <CardTitle>Atalhos</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Button asChild variant="outline">
-              <Link href="/profiles">Gerenciar perfis</Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/photoshoots">Gerenciar ensaios</Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/visagism">Nova análise</Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/reports">Ver relatórios</Link>
-            </Button>
+            {[
+              ["/profiles", "Gerenciar perfis"],
+              ["/photoshoots", "Gerenciar ensaios"],
+              ["/visagism", "Nova análise"],
+              ["/reports", "Ver relatórios"],
+            ].map(([href, label]) => (
+              <Link
+                key={href}
+                href={href}
+                className="inline-flex h-10 items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
+              >
+                {label}
+              </Link>
+            ))}
           </CardContent>
         </Card>
       </div>
