@@ -1,5 +1,6 @@
 """Tenant-isolation and creation-contract tests for the reports router."""
 
+import importlib.util
 import sys
 import types
 import uuid
@@ -10,8 +11,16 @@ import pytest
 from fastapi import HTTPException
 
 # app.routers.__init__ imports AI routers too; they are irrelevant to these tests.
-for _name in ("openai", "mediapipe", "cv2", "sklearn", "sklearn.cluster", "sklearn.metrics"):
-    sys.modules.setdefault(_name, types.ModuleType(_name))
+_OPTIONAL_MODULES = {
+    "openai": ("openai",),
+    "mediapipe": ("mediapipe",),
+    "cv2": ("cv2",),
+    "sklearn": ("sklearn", "sklearn.cluster", "sklearn.metrics"),
+}
+for _root, _modules in _OPTIONAL_MODULES.items():
+    if importlib.util.find_spec(_root) is None:
+        for _name in _modules:
+            sys.modules.setdefault(_name, types.ModuleType(_name))
 
 from app.routers import reports as reports_module
 from app.schemas import ReportCreate
@@ -114,7 +123,9 @@ async def test_create_report_uses_authenticated_tenant_and_only_mapped_fields():
         language="pt-BR",
     )
 
-    with patch.object(reports_module.ReportResponse, "model_validate", return_value={"ok": True}):
+    with patch.object(
+        reports_module.ReportResponse, "model_validate", return_value={"ok": True}
+    ):
         response = await reports_module.create_report(payload, current_user=user, db=db)
 
     created = db.add.call_args.args[0]
@@ -148,7 +159,9 @@ async def test_generate_pdf_revalidates_legacy_report_references():
     ]
     user = SimpleNamespace(id=uuid.uuid4(), tenant_id=tenant_a)
 
-    with patch.object(reports_module.ReportService, "generate_pdf", new=AsyncMock()) as generate_pdf:
+    with patch.object(
+        reports_module.ReportService, "generate_pdf", new=AsyncMock()
+    ) as generate_pdf:
         with pytest.raises(HTTPException) as exc:
             await reports_module.generate_pdf(report.id, current_user=user, db=db)
 

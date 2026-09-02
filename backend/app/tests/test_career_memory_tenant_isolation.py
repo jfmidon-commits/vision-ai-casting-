@@ -21,6 +21,7 @@ capturam o `tenant_id` recebido -- o que valida o contrato do router
 camada que foi corrigida.
 """
 
+import importlib.util
 import sys
 import types
 
@@ -28,11 +29,19 @@ import types
 # routers importados via app.routers.__init__, mas nao pelo career_memory.
 # Stub para permitir importar a app sem instalar todo o stack de visao
 # computacional neste ambiente de teste.
-for _name in ("openai", "mediapipe", "cv2", "sklearn", "sklearn.cluster", "sklearn.metrics"):
-    sys.modules.setdefault(_name, types.ModuleType(_name))
+_OPTIONAL_MODULES = {
+    "openai": ("openai",),
+    "mediapipe": ("mediapipe",),
+    "cv2": ("cv2",),
+    "sklearn": ("sklearn", "sklearn.cluster", "sklearn.metrics"),
+}
+for _root, _modules in _OPTIONAL_MODULES.items():
+    if importlib.util.find_spec(_root) is None:
+        for _name in _modules:
+            sys.modules.setdefault(_name, types.ModuleType(_name))
 
 import uuid
-from datetime import datetime, date
+from datetime import date, datetime
 from unittest.mock import patch
 
 import pytest
@@ -87,7 +96,9 @@ def test_authenticated_user_gets_own_tenant_id(tenant_a):
         captured["tenant_id"] = tenant_id
         return []
 
-    with patch.object(career_memory_module.career_service, "get_experiences", fake_get_experiences):
+    with patch.object(
+        career_memory_module.career_service, "get_experiences", fake_get_experiences
+    ):
         resp = client.get(f"/career/experiences/{uuid.uuid4()}")
 
     assert resp.status_code == 200
@@ -105,7 +116,9 @@ def test_header_cannot_override_jwt_tenant(tenant_a, tenant_b):
         captured["tenant_id"] = tenant_id
         return []
 
-    with patch.object(career_memory_module.career_service, "get_experiences", fake_get_experiences):
+    with patch.object(
+        career_memory_module.career_service, "get_experiences", fake_get_experiences
+    ):
         resp = client.get(
             f"/career/experiences/{uuid.uuid4()}",
             headers={"X-Tenant-ID": str(tenant_b)},
@@ -126,7 +139,9 @@ def test_tenant_a_user_never_leaks_tenant_b_id_to_service(tenant_a, tenant_b):
         captured.append(tenant_id)
         return {"profile_id": str(profile_id), "tenant_id": str(tenant_id)}
 
-    with patch.object(career_memory_module.career_service, "getTalentContext", fake_get_talent_context):
+    with patch.object(
+        career_memory_module.career_service, "getTalentContext", fake_get_talent_context
+    ):
         app_a = _make_app()
         client_a = _client_as(app_a, FakeUser(tenant_id=tenant_a))
         resp_a = client_a.get(f"/career/context/{uuid.uuid4()}")
@@ -193,7 +208,9 @@ def test_create_experience_persists_correct_tenant(tenant_a):
         "title": "Campanha de verão",
     }
 
-    with patch.object(career_memory_module.career_service, "create_experience", fake_create_experience):
+    with patch.object(
+        career_memory_module.career_service, "create_experience", fake_create_experience
+    ):
         resp = client.post("/career/experiences", json=payload)
 
     assert resp.status_code == 201, resp.text
@@ -212,7 +229,9 @@ def test_search_memory_uses_jwt_tenant_not_header(tenant_a, tenant_b):
         captured["tenant_id"] = tenant_id
         return {"results": []}
 
-    with patch.object(career_memory_module.career_service, "searchMemory", fake_search_memory):
+    with patch.object(
+        career_memory_module.career_service, "searchMemory", fake_search_memory
+    ):
         resp = client.get(
             f"/career/search/{uuid.uuid4()}",
             params={"q": "campanha"},
