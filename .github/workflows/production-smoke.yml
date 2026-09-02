@@ -32,7 +32,7 @@ jobs:
 
       - name: Wait for the expected backend revision on Render
         env:
-          HEALTH_URL: https://vision-ai-casting-api.onrender.com/health
+          HEALTH_URL: https://vision-ai-casting-backend.onrender.com/health
           EXPECTED_SHA: ${{ steps.expected.outputs.sha }}
         run: |
           set -euo pipefail
