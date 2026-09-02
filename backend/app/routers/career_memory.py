@@ -12,9 +12,10 @@ Endpoints para gerenciar e consultar a memoria de carreira do talento:
 - Historico relevante (getRelevantHistory)
 """
 
-from typing import List, Optional, Dict, Any
-from uuid import UUID
 from datetime import date
+from typing import Any, Dict, List, Optional
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,13 +24,20 @@ from app.memory.career_memory_service import CareerMemoryService
 from app.middleware.auth import get_current_user
 from app.middleware.tenant import get_tenant_id
 from app.schemas.schemas import (
-    ProfessionalExperienceCreate, ProfessionalExperienceResponse,
-    CharacterCreate, CharacterResponse,
-    CampaignCreate, CampaignResponse,
-    CareerFeedbackCreate, CareerFeedbackResponse,
-    AppearanceRecordCreate, AppearanceRecordResponse,
-    StylePreferenceCreate, StylePreferenceResponse,
-    ContentPerformanceCreate, ContentPerformanceResponse,
+    AppearanceRecordCreate,
+    AppearanceRecordResponse,
+    CampaignCreate,
+    CampaignResponse,
+    CareerFeedbackCreate,
+    CareerFeedbackResponse,
+    CharacterCreate,
+    CharacterResponse,
+    ContentPerformanceCreate,
+    ContentPerformanceResponse,
+    ProfessionalExperienceCreate,
+    ProfessionalExperienceResponse,
+    StylePreferenceCreate,
+    StylePreferenceResponse,
 )
 from app.utils.logger import get_logger
 
@@ -40,7 +48,12 @@ career_service = CareerMemoryService()
 
 # ========== PROFESSIONAL EXPERIENCES ==========
 
-@router.post("/experiences", response_model=ProfessionalExperienceResponse, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/experiences",
+    response_model=ProfessionalExperienceResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_experience(
     data: ProfessionalExperienceCreate,
     db: AsyncSession = Depends(get_db),
@@ -73,7 +86,9 @@ async def create_experience(
     return experience
 
 
-@router.get("/experiences/{profile_id}", response_model=List[ProfessionalExperienceResponse])
+@router.get(
+    "/experiences/{profile_id}", response_model=List[ProfessionalExperienceResponse]
+)
 async def get_experiences(
     profile_id: UUID,
     production_type: Optional[str] = None,
@@ -85,7 +100,10 @@ async def get_experiences(
     """Lista experiencias profissionais de um perfil."""
     if production_type:
         experiences = await career_service.get_experiences_by_type(
-            db=db, profile_id=profile_id, production_type=production_type
+            db=db,
+            profile_id=profile_id,
+            tenant_id=tenant_id,
+            production_type=production_type,
         )
     else:
         experiences = await career_service.get_experiences(
@@ -96,7 +114,10 @@ async def get_experiences(
 
 # ========== CHARACTERS ==========
 
-@router.post("/characters", response_model=CharacterResponse, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/characters", response_model=CharacterResponse, status_code=status.HTTP_201_CREATED
+)
 async def create_character(
     data: CharacterCreate,
     db: AsyncSession = Depends(get_db),
@@ -144,18 +165,27 @@ async def get_characters(
     """Lista personagens de um perfil."""
     if archetype:
         characters = await career_service.get_character_by_archetype(
-            db=db, profile_id=profile_id, archetype=archetype
+            db=db,
+            profile_id=profile_id,
+            tenant_id=tenant_id,
+            archetype=archetype,
         )
     else:
         characters = await career_service.get_characters(
-            db=db, profile_id=profile_id, tenant_id=tenant_id, include_simulated=include_simulated
+            db=db,
+            profile_id=profile_id,
+            tenant_id=tenant_id,
+            include_simulated=include_simulated,
         )
     return characters
 
 
 # ========== CAMPAIGNS ==========
 
-@router.post("/campaigns", response_model=CampaignResponse, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/campaigns", response_model=CampaignResponse, status_code=status.HTTP_201_CREATED
+)
 async def create_campaign(
     data: CampaignCreate,
     db: AsyncSession = Depends(get_db),
@@ -199,7 +229,12 @@ async def get_campaigns(
 
 # ========== FEEDBACKS ==========
 
-@router.post("/feedbacks", response_model=CareerFeedbackResponse, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/feedbacks",
+    response_model=CareerFeedbackResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_feedback(
     data: CareerFeedbackCreate,
     db: AsyncSession = Depends(get_db),
@@ -237,15 +272,23 @@ async def get_feedbacks(
 ):
     """Lista feedbacks de um perfil."""
     feedbacks = await career_service.get_feedbacks(
-        db=db, profile_id=profile_id, tenant_id=tenant_id,
-        feedback_type=feedback_type, is_positive=is_positive
+        db=db,
+        profile_id=profile_id,
+        tenant_id=tenant_id,
+        feedback_type=feedback_type,
+        is_positive=is_positive,
     )
     return feedbacks
 
 
 # ========== APPEARANCE RECORDS ==========
 
-@router.post("/appearances", response_model=AppearanceRecordResponse, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/appearances",
+    response_model=AppearanceRecordResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_appearance_record(
     data: AppearanceRecordCreate,
     db: AsyncSession = Depends(get_db),
@@ -272,7 +315,9 @@ async def create_appearance_record(
     return record
 
 
-@router.get("/appearances/{profile_id}/approved", response_model=List[AppearanceRecordResponse])
+@router.get(
+    "/appearances/{profile_id}/approved", response_model=List[AppearanceRecordResponse]
+)
 async def get_approved_appearances(
     profile_id: UUID,
     db: AsyncSession = Depends(get_db),
@@ -286,7 +331,9 @@ async def get_approved_appearances(
     return appearances
 
 
-@router.get("/appearances/{profile_id}/rejected", response_model=List[AppearanceRecordResponse])
+@router.get(
+    "/appearances/{profile_id}/rejected", response_model=List[AppearanceRecordResponse]
+)
 async def get_rejected_appearances(
     profile_id: UUID,
     db: AsyncSession = Depends(get_db),
@@ -302,7 +349,12 @@ async def get_rejected_appearances(
 
 # ========== STYLE PREFERENCES ==========
 
-@router.post("/style-preferences", response_model=StylePreferenceResponse, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/style-preferences",
+    response_model=StylePreferenceResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_style_preference(
     data: StylePreferenceCreate,
     db: AsyncSession = Depends(get_db),
@@ -322,7 +374,9 @@ async def create_style_preference(
     return pref
 
 
-@router.get("/style-preferences/{profile_id}", response_model=List[StylePreferenceResponse])
+@router.get(
+    "/style-preferences/{profile_id}", response_model=List[StylePreferenceResponse]
+)
 async def get_style_preferences(
     profile_id: UUID,
     preference_type: Optional[str] = None,
@@ -332,14 +386,22 @@ async def get_style_preferences(
 ):
     """Lista preferencias de estilo de um perfil."""
     prefs = await career_service.get_style_preferences(
-        db=db, profile_id=profile_id, tenant_id=tenant_id, preference_type=preference_type
+        db=db,
+        profile_id=profile_id,
+        tenant_id=tenant_id,
+        preference_type=preference_type,
     )
     return prefs
 
 
 # ========== CONTENT PERFORMANCE ==========
 
-@router.post("/content-performance", response_model=ContentPerformanceResponse, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/content-performance",
+    response_model=ContentPerformanceResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_content_performance(
     data: ContentPerformanceCreate,
     db: AsyncSession = Depends(get_db),
@@ -363,7 +425,9 @@ async def create_content_performance(
     return perf
 
 
-@router.get("/content-performance/{profile_id}", response_model=List[ContentPerformanceResponse])
+@router.get(
+    "/content-performance/{profile_id}", response_model=List[ContentPerformanceResponse]
+)
 async def get_content_performances(
     profile_id: UUID,
     best_performing_only: bool = Query(False),
@@ -373,18 +437,25 @@ async def get_content_performances(
 ):
     """Lista performances de conteudo de um perfil."""
     performances = await career_service.get_content_performances(
-        db=db, profile_id=profile_id, tenant_id=tenant_id, best_performing_only=best_performing_only
+        db=db,
+        profile_id=profile_id,
+        tenant_id=tenant_id,
+        best_performing_only=best_performing_only,
     )
     return performances
 
 
 # ========== TALENT GRAPH: CONSULTA INTEGRADA ==========
 
+
 @router.get("/search/{profile_id}")
 async def search_memory(
     profile_id: UUID,
     q: str = Query(..., min_length=1, description="Termo de busca"),
-    entity_types: Optional[List[str]] = Query(None, description="Tipos de entidade: experiences, characters, campaigns, feedbacks, appearances"),
+    entity_types: Optional[List[str]] = Query(
+        None,
+        description="Tipos de entidade: experiences, characters, campaigns, feedbacks, appearances",
+    ),
     limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -410,7 +481,9 @@ async def search_memory(
 @router.get("/context/{profile_id}")
 async def get_talent_context(
     profile_id: UUID,
-    include_private: bool = Query(False, description="Incluir dados privados (simulation prompts)"),
+    include_private: bool = Query(
+        False, description="Incluir dados privados (simulation prompts)"
+    ),
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
     tenant_id: UUID = Depends(get_tenant_id),
@@ -434,8 +507,12 @@ async def get_talent_context(
 @router.get("/relevant/{profile_id}")
 async def get_relevant_history(
     profile_id: UUID,
-    context: str = Query(..., description="Contexto: casting, character, campaign, content"),
-    keywords: Optional[List[str]] = Query(None, description="Palavras-chave para filtrar"),
+    context: str = Query(
+        ..., description="Contexto: casting, character, campaign, content"
+    ),
+    keywords: Optional[List[str]] = Query(
+        None, description="Palavras-chave para filtrar"
+    ),
     limit: int = Query(10, ge=1, le=50),
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),

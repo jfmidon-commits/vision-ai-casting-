@@ -10,7 +10,7 @@ from app.core.websocket import manager
 from app.database import AsyncSessionLocal, get_db
 from app.middleware.auth import get_current_user
 from app.models import Analysis, Photo, Photoshoot
-from app.schemas import APIResponse, AnalysisCreate, AnalysisProgress
+from app.schemas import AnalysisCreate, AnalysisProgress, APIResponse
 from app.services.ai_service import AIService
 from app.utils.logger import get_logger
 
@@ -21,11 +21,20 @@ router = APIRouter(prefix="/api/v1/ai", tags=["ai"])
 ANALYSIS_TIMEOUT_SECONDS = 300
 
 
-async def _mark_analysis_failed(analysis_id: str, error_message: str) -> None:
+async def _mark_analysis_failed(
+    analysis_id: str, error_message: str, tenant_id: str
+) -> None:
     """Persist a terminal failure so analyses never remain stuck in processing."""
     try:
         async with AsyncSessionLocal() as db:
-            result = await db.execute(select(Analysis).where(Analysis.id == analysis_id))
+            result = await db.execute(
+                select(Analysis).where(
+                    and_(
+                        Analysis.id == analysis_id,
+                        Analysis.tenant_id == tenant_id,
+                    )
+                )
+            )
             analysis = result.scalar_one_or_none()
             if not analysis or analysis.status == "completed":
                 return
@@ -44,7 +53,9 @@ async def _mark_analysis_failed(analysis_id: str, error_message: str) -> None:
             analysis.completed_at = datetime.utcnow()
             await db.commit()
     except Exception:
-        logger.exception("Failed to persist terminal state for analysis %s", analysis_id)
+        logger.exception(
+            "Failed to persist terminal state for analysis %s", analysis_id
+        )
 
 
 async def _run_analysis_safely(
@@ -72,12 +83,14 @@ async def _run_analysis_safely(
         logger.info("Analysis %s background pipeline completed", analysis_id)
     except asyncio.TimeoutError:
         message = f"analysis_timeout_after_{ANALYSIS_TIMEOUT_SECONDS}s"
-        logger.error("Analysis %s timed out after %ss", analysis_id, ANALYSIS_TIMEOUT_SECONDS)
-        await _mark_analysis_failed(analysis_id, message)
+        logger.error(
+            "Analysis %s timed out after %ss", analysis_id, ANALYSIS_TIMEOUT_SECONDS
+        )
+        await _mark_analysis_failed(analysis_id, message, tenant_id)
     except Exception as exc:
         message = f"{type(exc).__name__}: {exc}"
         logger.exception("Analysis %s pipeline failed: %s", analysis_id, message)
-        await _mark_analysis_failed(analysis_id, message)
+        await _mark_analysis_failed(analysis_id, message, tenant_id)
 
 
 @router.post("/analyze", response_model=APIResponse)

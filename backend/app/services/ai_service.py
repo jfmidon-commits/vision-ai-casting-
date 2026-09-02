@@ -104,16 +104,25 @@ class AIService:
         analysis_types: List[str],
         tenant_id: str,
     ):
+        from sqlalchemy import and_, select
+
         from app.database import AsyncSessionLocal
         from app.models import Analysis, Photo
-        from sqlalchemy import select
 
         # A previous analysis may have left native allocator arenas behind.
         _release_process_memory()
         log_rss("analysis_start_after_gc", analysis_id)
 
         async with AsyncSessionLocal() as db:
-            result = await db.execute(select(Analysis).where(Analysis.id == analysis_id))
+            result = await db.execute(
+                select(Analysis).where(
+                    and_(
+                        Analysis.id == analysis_id,
+                        Analysis.photoshoot_id == photoshoot_id,
+                        Analysis.tenant_id == tenant_id,
+                    )
+                )
+            )
             analysis = result.scalar_one()
             analysis.status = "processing"
             await db.commit()
@@ -121,7 +130,12 @@ class AIService:
             start_time = time.time()
 
             result = await db.execute(
-                select(Photo).where(Photo.photoshoot_id == photoshoot_id)
+                select(Photo).where(
+                    and_(
+                        Photo.photoshoot_id == photoshoot_id,
+                        Photo.tenant_id == tenant_id,
+                    )
+                )
             )
             photos = result.scalars().all()
 
@@ -148,19 +162,23 @@ class AIService:
 
             if "visagism" in analysis_types:
                 approved_preprocessed = []
-                bypass_triage = os.environ.get(
-                    "VISION_BYPASS_TRIAGE", ""
-                ).lower() in ("1", "true", "yes")
+                bypass_triage = os.environ.get("VISION_BYPASS_TRIAGE", "").lower() in (
+                    "1",
+                    "true",
+                    "yes",
+                )
 
                 if bypass_triage:
                     for photo_meta, prep in zip(photos_data, preprocessed):
-                        triage_results.append({
-                            "filename": photo_meta.get("id", "unknown"),
-                            "category": "frontal",
-                            "confidence": 1.0,
-                            "selected": True,
-                            "rejection_reasons": [],
-                        })
+                        triage_results.append(
+                            {
+                                "filename": photo_meta.get("id", "unknown"),
+                                "category": "frontal",
+                                "confidence": 1.0,
+                                "selected": True,
+                                "rejection_reasons": [],
+                            }
+                        )
                         approved_preprocessed.append(prep)
                 else:
                     from app.ai.image_triage.engine import (
@@ -198,19 +216,13 @@ class AIService:
                                     "selected": tr.selected,
                                     "rejection_reasons": tr.rejection_reasons or [],
                                 }
-                                if (
-                                    tr.selected
-                                    and tr.category
-                                    not in (
-                                        TriageCategory.REJECTED,
-                                        TriageCategory.UNKNOWN,
-                                    )
+                                if tr.selected and tr.category not in (
+                                    TriageCategory.REJECTED,
+                                    TriageCategory.UNKNOWN,
                                 ):
                                     approved_preprocessed.append(prep)
                             else:
-                                entry["rejection_reasons"] = [
-                                    "url_missing_for_triage"
-                                ]
+                                entry["rejection_reasons"] = ["url_missing_for_triage"]
                         except Exception as exc:
                             entry["rejection_reasons"] = [f"triage_error: {exc}"]
                             entry["selected"] = False
@@ -229,9 +241,7 @@ class AIService:
                     triage_blocked = True
 
             pipeline_photos = (
-                approved_preprocessed
-                if "visagism" in analysis_types
-                else preprocessed
+                approved_preprocessed if "visagism" in analysis_types else preprocessed
             )
             image_bytes = _first_image_bytes(pipeline_photos)
 
@@ -277,8 +287,8 @@ class AIService:
                         expression_analyzer = ExpressionAnalyzer()
                         try:
                             log_rss("expressions_start", analysis_id)
-                            parallel_results["expressions"] = expression_analyzer.analyze(
-                                image_bytes
+                            parallel_results["expressions"] = (
+                                expression_analyzer.analyze(image_bytes)
                             )
                             log_rss("expressions_end", analysis_id)
                         except Exception as exc:
@@ -303,8 +313,8 @@ class AIService:
                         photogenic_analyzer = PhotogenicAnalyzer()
                         try:
                             log_rss("photogenic_start", analysis_id)
-                            parallel_results["photogenic"] = photogenic_analyzer.analyze(
-                                image_bytes
+                            parallel_results["photogenic"] = (
+                                photogenic_analyzer.analyze(image_bytes)
                             )
                             log_rss("photogenic_end", analysis_id)
                         except Exception as exc:
@@ -329,8 +339,8 @@ class AIService:
                         colorimetry_analyzer = ColorimetryAnalyzer()
                         try:
                             log_rss("colorimetry_start", analysis_id)
-                            parallel_results["colorimetry"] = colorimetry_analyzer.analyze(
-                                image_bytes
+                            parallel_results["colorimetry"] = (
+                                colorimetry_analyzer.analyze(image_bytes)
                             )
                             log_rss("colorimetry_end", analysis_id)
                         except Exception as exc:
@@ -366,8 +376,10 @@ class AIService:
                             engine_errors.append(
                                 f"grooming_error:{type(exc).__name__}:{exc}"
                             )
-                            parallel_results["grooming"] = grooming_analyzer._error_result(
-                                f"Grooming indisponivel nesta foto: {exc}"
+                            parallel_results["grooming"] = (
+                                grooming_analyzer._error_result(
+                                    f"Grooming indisponivel nesta foto: {exc}"
+                                )
                             )
                         finally:
                             _release_process_memory(grooming_analyzer)
@@ -415,9 +427,11 @@ class AIService:
                     visagism_analyzer = VisagismAnalyzer()
                     try:
                         log_rss("visagism_start", analysis_id)
-                        sequential_results["visagism"] = await visagism_analyzer.analyze(
-                            pipeline_photos,
-                            context,
+                        sequential_results["visagism"] = (
+                            await visagism_analyzer.analyze(
+                                pipeline_photos,
+                                context,
+                            )
                         )
                         log_rss("visagism_end", analysis_id)
                     finally:
@@ -522,26 +536,29 @@ class AIService:
             os.write(fd, raw)
             os.close(fd)
             tr = triage_engine.process_image(tmp_path)
-            triage_results.append({
-                "filename": tr.filename,
-                "category": tr.category.value,
-                "confidence": tr.confidence,
-                "selected": tr.selected,
-                "rejection_reasons": tr.rejection_reasons or [],
-            })
-            approved = (
-                tr.selected
-                and tr.category
-                not in (TriageCategory.REJECTED, TriageCategory.UNKNOWN)
+            triage_results.append(
+                {
+                    "filename": tr.filename,
+                    "category": tr.category.value,
+                    "confidence": tr.confidence,
+                    "selected": tr.selected,
+                    "rejection_reasons": tr.rejection_reasons or [],
+                }
+            )
+            approved = tr.selected and tr.category not in (
+                TriageCategory.REJECTED,
+                TriageCategory.UNKNOWN,
             )
         except Exception as exc:
-            triage_results.append({
-                "filename": str(getattr(photo, "id", "unknown")),
-                "category": TriageCategory.REJECTED.value,
-                "confidence": 0.0,
-                "selected": False,
-                "rejection_reasons": [f"triage_error: {exc}"],
-            })
+            triage_results.append(
+                {
+                    "filename": str(getattr(photo, "id", "unknown")),
+                    "category": TriageCategory.REJECTED.value,
+                    "confidence": 0.0,
+                    "selected": False,
+                    "rejection_reasons": [f"triage_error: {exc}"],
+                }
+            )
         finally:
             if tmp_path and os.path.exists(tmp_path):
                 try:
