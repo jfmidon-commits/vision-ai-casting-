@@ -92,7 +92,9 @@ class StorageService:
                 ExtraArgs={"ContentType": content_type},
             )
 
-        url = f"https://{settings.S3_BUCKET}.s3.{settings.AWS_REGION}.amazonaws.com/{key}"
+        url = (
+            f"https://{settings.S3_BUCKET}.s3.{settings.AWS_REGION}.amazonaws.com/{key}"
+        )
         return url, url
 
     @classmethod
@@ -106,7 +108,9 @@ class StorageService:
             Body=file_data,
             ContentType=content_type,
         )
-        return f"https://{settings.S3_BUCKET}.s3.{settings.AWS_REGION}.amazonaws.com/{key}"
+        return (
+            f"https://{settings.S3_BUCKET}.s3.{settings.AWS_REGION}.amazonaws.com/{key}"
+        )
 
     @classmethod
     def read_object_from_url(
@@ -144,7 +148,9 @@ class StorageService:
     @classmethod
     def get_file_url(cls, key: str) -> str:
         """Return the public URL for an S3 object."""
-        return f"https://{settings.S3_BUCKET}.s3.{settings.AWS_REGION}.amazonaws.com/{key}"
+        return (
+            f"https://{settings.S3_BUCKET}.s3.{settings.AWS_REGION}.amazonaws.com/{key}"
+        )
 
     @classmethod
     async def delete_file(cls, key: str) -> bool:
