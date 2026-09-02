@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useState } from "react";
+import { useAuthStore } from "@/stores/auth-store";
 
 interface WebSocketMessage {
   type: string;
@@ -12,13 +13,14 @@ export function useWebSocket(
   onMessage?: (data: WebSocketMessage) => void
 ) {
   const ws = useRef<WebSocket | null>(null);
+  const token = useAuthStore((state) => state.token);
   const [isConnected, setIsConnected] = useState(false);
   const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null);
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 5;
 
   const connect = useCallback(() => {
-    if (!analysisId) return;
+    if (!analysisId || !token) return;
 
     const wsUrl =
       process.env.NEXT_PUBLIC_WS_URL ||
@@ -26,7 +28,10 @@ export function useWebSocket(
         ? `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}`
         : "ws://localhost:8000");
 
-    ws.current = new WebSocket(`${wsUrl}/ws/progress/${analysisId}`);
+    ws.current = new WebSocket(`${wsUrl}/ws/progress/${analysisId}`, [
+      "bearer",
+      token,
+    ]);
 
     ws.current.onopen = () => {
       console.log("WebSocket connected");
@@ -55,7 +60,7 @@ export function useWebSocket(
     ws.current.onerror = (error) => {
       console.error("WebSocket error:", error);
     };
-  }, [analysisId, onMessage]);
+  }, [analysisId, onMessage, token]);
 
   const sendMessage = useCallback((message: WebSocketMessage) => {
     if (ws.current?.readyState === WebSocket.OPEN) {
