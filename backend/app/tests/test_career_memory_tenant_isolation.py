@@ -24,6 +24,13 @@ camada que foi corrigida.
 import importlib.util
 import sys
 import types
+import uuid
+from datetime import datetime
+from unittest.mock import patch
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 # Dependencias pesadas (mediapipe/cv2/sklearn/openai) sao usadas por outros
 # routers importados via app.routers.__init__, mas nao pelo career_memory.
@@ -40,17 +47,13 @@ for _root, _modules in _OPTIONAL_MODULES.items():
         for _name in _modules:
             sys.modules.setdefault(_name, types.ModuleType(_name))
 
-import uuid
-from datetime import date, datetime
-from unittest.mock import patch
-
-import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-
-from app.middleware.auth import get_current_user
-from app.routers import career_memory as career_memory_module
-from app.routers.career_memory import router as career_memory_router
+from app.middleware.auth import get_current_user  # noqa: E402  # isort: skip
+from app.routers import (  # noqa: E402  # isort: skip
+    career_memory as career_memory_module,
+)
+from app.routers.career_memory import (  # noqa: E402  # isort: skip
+    router as career_memory_router,
+)
 
 
 class FakeUser:

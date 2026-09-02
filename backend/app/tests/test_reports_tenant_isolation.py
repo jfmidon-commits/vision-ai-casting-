@@ -22,8 +22,8 @@ for _root, _modules in _OPTIONAL_MODULES.items():
         for _name in _modules:
             sys.modules.setdefault(_name, types.ModuleType(_name))
 
-from app.routers import reports as reports_module
-from app.schemas import ReportCreate
+from app.routers import reports as reports_module  # noqa: E402  # isort: skip
+from app.schemas import ReportCreate  # noqa: E402  # isort: skip
 
 
 def _scalar_result(value):
